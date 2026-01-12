@@ -68,7 +68,8 @@
 
 | Feature | Description |
 |---------|-------------|
-| **40Hz Real-Time Streaming** | WebSocket endpoint with soft real-time timing (1-15ms variance) |
+| **40Hz Real-Time Streaming** | WebSocket + LSL endpoints with soft real-time timing (1-15ms variance) |
+| **Dual Streaming Protocols** | WebSocket for web clients + LSL for neuroscience tools (OpenViBE, BCI2000) |
 | **Multi-Session Architecture** | Independent streams with shareable URLs and automatic expiration |
 | **Intent-Based Calibration** | Query trials by target, filter streams by intention |
 | **Time-Aligned Payloads** | Spike counts + cursor kinematics + target intention synchronized to 25ms bins |
@@ -240,6 +241,7 @@ python test_calibration.py
 | **server.py** | FastAPI app with REST + WebSocket endpoints, session management |
 | **session_manager.py** | Multi-session orchestration, LRU eviction, auto-cleanup |
 | **playback_engine.py** | 40Hz asyncio streaming loop with intent filtering |
+| **lsl_streamer.py** | LSL (Lab Streaming Layer) outlet manager for neuroscience tools |
 | **data_loader.py** | Lazy NWB/HDF5 loader with trial metadata extraction |
 | **models.py** | Pydantic data models for type safety and validation |
 | **config.py** | Configuration settings (frequency, ports, limits) |
@@ -248,9 +250,9 @@ python test_calibration.py
 
 - **Web Framework**: FastAPI 0.109+ with Uvicorn ASGI server
 - **Neural Data**: PyNWB 2.6+ with H5py for lazy HDF5 access
+- **Streaming Protocols**: WebSockets 12.0 + pylsl 1.16+ for dual streaming
 - **Async Runtime**: Python asyncio for concurrent streaming
 - **Data Models**: Pydantic 2.5+ for type validation
-- **WebSockets**: websockets 12.0 for real-time communication
 
 ### Performance Characteristics
 
@@ -367,6 +369,49 @@ ws.onmessage = (event) => {
   console.log('Position:', packet.data.kinematics.x, packet.data.kinematics.y);
   console.log('Target:', packet.data.intention.target_x, packet.data.intention.target_y);
 };
+```
+
+### LSL (Lab Streaming Layer) Streaming
+
+PhantomLink automatically creates LSL outlets for each session, enabling integration with neuroscience tools like OpenViBE, BCI2000, and MATLAB.
+
+#### LSL Stream Names
+
+For each session (e.g., `swift-neural-42`), three LSL streams are created:
+
+- **PhantomLink-Neural-{session_code}**: Spike counts (142 channels, int32)
+- **PhantomLink-Kinematics-{session_code}**: Cursor position and velocity (4 channels: vx, vy, x, y)
+- **PhantomLink-Intention-{session_code}**: Target and trial markers (4 channels: target_id, target_x, target_y, trial_id)
+
+#### Python LSL Client Example
+
+```python
+from pylsl import StreamInlet, resolve_stream
+
+# Resolve the neural stream
+print("Looking for PhantomLink-Neural stream...")
+streams = resolve_stream('type', 'EEG')
+
+# Connect to the stream
+inlet = StreamInlet(streams[0])
+
+# Receive data at 40Hz
+while True:
+    sample, timestamp = inlet.pull_sample()
+    print(f"LSL Timestamp: {timestamp:.3f}, Spike counts: {sample[:5]}...")  # First 5 channels
+```
+
+#### Configuration
+
+LSL can be enabled/disabled via environment variables:
+
+```bash
+# Disable LSL (WebSocket only)
+export PHANTOM_LSL_ENABLED=false
+
+# Customize LSL stream names
+export PHANTOM_LSL_STREAM_NAME="MyBCI-Stream"
+export PHANTOM_LSL_SOURCE_ID="MyBCI-001"
 ```
 
 #### Filter by Target

@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     max_connections: int = 10
     buffer_size: int = 100  # Number of packets to pre-buffer
     
+    # LSL Configuration
+    lsl_enabled: bool = True  # Enable LSL streaming alongside WebSocket
+    lsl_stream_name: str = "PhantomLink-Neural"
+    lsl_stream_type: str = "EEG"  # Stream type for LSL
+    lsl_source_id: str = "PhantomLink-001"
+    
     class Config:
         env_prefix = "PHANTOM_"
 

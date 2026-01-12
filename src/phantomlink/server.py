@@ -17,6 +17,7 @@ from phantomlink.config import settings
 from phantomlink.models import StreamMetadata
 from phantomlink.playback_engine import PlaybackEngine
 from phantomlink.session_manager import SessionManager
+from phantomlink.lsl_streamer import LSLStreamManager
 
 # Configure logging
 logging.basicConfig(
@@ -43,6 +44,7 @@ app.add_middleware(
 
 # Global session manager
 session_manager: SessionManager = None
+lsl_manager: LSLStreamManager = None
 active_connections: Set[WebSocket] = set()
 cleanup_task = None
 
@@ -60,9 +62,13 @@ async def periodic_cleanup():
 @app.on_event("startup")
 async def startup_event():
     """Initialize the session manager on startup."""
-    global session_manager, cleanup_task
+    global session_manager, cleanup_task, lsl_manager
     
     logger.info("Starting PhantomLink Core server")
+    
+    # Initialize LSL stream manager
+    lsl_manager = LSLStreamManager()
+    logger.info("LSL Stream Manager initialized")
     
     # Determine dataset path - try .nwb first, then .h5
     data_dir = Path(settings.data_dir)
@@ -93,13 +99,17 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Clean up resources on shutdown."""
-    global session_manager, cleanup_task
+    global session_manager, cleanup_task, lsl_manager
     
     logger.info("Shutting down PhantomLink Core server")
     
     # Cancel cleanup task
     if cleanup_task:
         cleanup_task.cancel()
+    
+    # Cleanup LSL manager
+    if lsl_manager:
+        lsl_manager.cleanup_all()
     
     # Cleanup session manager
     if session_manager:
@@ -271,9 +281,12 @@ async def get_stats():
         raise HTTPException(status_code=503, detail="Session manager not initialized")
     
     stats = session_manager.get_stats()
+    lsl_stats = lsl_manager.get_stats() if lsl_manager else {}
+    
     return {
         "active_connections": len(active_connections),
-        "session_manager": stats
+        "session_manager": stats,
+        "lsl_streaming": lsl_stats
     }
 
 
@@ -367,6 +380,17 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
     active_connections.add(websocket)
     session_manager.increment_connections(session_code)
     
+    # Initialize LSL streamer for this session if enabled
+    lsl_streamer = None
+    if lsl_manager and settings.lsl_enabled:
+        lsl_streamer = lsl_manager.get_streamer(session_code)
+        if not lsl_streamer:
+            # Create LSL streamer for this session
+            metadata = playback_engine.get_metadata()
+            lsl_streamer = lsl_manager.create_streamer(session_code, metadata.num_channels)
+            if lsl_streamer:
+                logger.info(f"LSL streaming enabled for session {session_code}")
+    
     client_id = id(websocket)
     logger.info(f"Client {client_id} connected to session {session_code}. Active connections: {len(active_connections)}")
     
@@ -385,7 +409,11 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
         # Start streaming packets with optional filters
         async for packet in playback_engine.stream(loop=True, trial_filter=trial_id, target_filter=target_id):
             try:
-                # Send packet as JSON
+                # Send packet via LSL if enabled
+                if lsl_streamer:
+                    await lsl_streamer.push_packet_async(packet)
+                
+                # Send packet as JSON via WebSocket
                 await websocket.send_json({
                     "type": "data",
                     "data": packet.model_dump()
