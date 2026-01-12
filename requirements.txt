@@ -1,0 +1,21 @@
+# Core FastAPI and WebSocket dependencies
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+websockets==12.0
+
+# Neural data processing
+pynwb>=2.6.0
+h5py>=3.11.0
+numpy>=1.26.0
+
+# Data handling
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dateutil==2.8.2
+
+# Performance and async
+aiofiles==23.2.1
+
+# Optional: for downloading Neural Latents Benchmark data
+requests==2.31.0
+tqdm==4.66.1
