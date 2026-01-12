@@ -301,7 +301,14 @@ curl http://localhost:8000/metrics
 
 ### WebSocket Streaming
 
-#### Connect to Stream
+PhantomLink provides two WebSocket endpoints:
+
+1. **JSON Endpoint** (`/stream/{session_code}`): Human-readable JSON format for debugging and development
+2. **Binary Endpoint** (`/stream/binary/{session_code}`): High-performance MessagePack format for production
+
+📊 **Performance Comparison**: Binary endpoint provides 60% smaller payloads and 3-5x faster serialization. See [BINARY_STREAMING_GUIDE.md](docs/BINARY_STREAMING_GUIDE.md) for details.
+
+#### Connect to Stream (JSON)
 
 ```javascript
 const ws = new WebSocket('ws://localhost:8000/stream/swift-neural-42');
@@ -315,19 +322,25 @@ ws.onmessage = (event) => {
 };
 ```
 
-#### Python MessagePack Client
+#### Connect to Binary Stream (MessagePack)
 
 ```python
 import msgpack
 import websockets
 
-async with websockets.connect("ws://localhost:8000/stream/swift-neural-42") as ws:
+async with websockets.connect("ws://localhost:8000/stream/binary/swift-neural-42") as ws:
     binary_data = await ws.recv()
     packet = msgpack.unpackb(binary_data, raw=False)
     
-    spike_counts = packet["data"]["spikes"]["spike_counts"]  # 142 channels
-    kinematics = packet["data"]["kinematics"]  # {x, y, vx, vy}
-    intention = packet["data"]["intention"]    # {target_id, target_x, target_y}
+    spike_counts = packet["spikes"]["spike_counts"]  # 142 channels
+    kinematics = packet["kinematics"]  # {x, y, vx, vy}
+    intention = packet["intention"]    # {target_id, target_x, target_y}
+```
+
+**Example Client:**
+```bash
+python examples/binary_client_example.py
+```
 ```
 
 #### Filter by Target

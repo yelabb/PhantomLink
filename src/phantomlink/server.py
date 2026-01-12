@@ -142,11 +142,13 @@ async def root():
             "session_stats": "GET /api/sessions/{session_code}",
             "metadata": "/api/metadata",
             "trials": "/api/trials",
-            "stream": "ws://localhost:8000/stream/{session_code}"
+            "stream": "ws://localhost:8000/stream/{session_code}",
+            "stream_binary": "ws://localhost:8000/stream/binary/{session_code}"
         },
         "examples": [
             "Create session: POST /api/sessions/create",
-            "Stream: ws://localhost:8000/stream/swift-neural-42",
+            "Stream (JSON): ws://localhost:8000/stream/swift-neural-42",
+            "Stream (Binary/MessagePack): ws://localhost:8000/stream/binary/swift-neural-42",
             "With filter: ws://localhost:8000/stream/swift-neural-42?target_id=0"
         ]
     }
@@ -351,7 +353,7 @@ async def seek_playback(session_code: str, position_seconds: float):
 async def websocket_stream(websocket: WebSocket, session_code: str, 
                           trial_id: Optional[int] = None, target_id: Optional[int] = None):
     """
-    WebSocket endpoint for 40Hz neural data streaming with session isolation.
+    WebSocket endpoint for 40Hz neural data streaming with session isolation (JSON format).
     
     Path parameters:
         session_code: Session identifier (e.g., 'swift-neural-42')
@@ -361,9 +363,11 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
         target_id: Filter to only stream packets reaching for this target index
     
     Clients connect to ws://localhost:8000/stream/{session_code} to receive real-time
-    packets containing time-aligned spike counts and behavioral ground truth.
+    packets containing time-aligned spike counts and behavioral ground truth in JSON format.
     
     Each session has independent playback state (position, pause, filters).
+    
+    For better performance, use the binary endpoint: /stream/binary/{session_code}
     """
     if not session_manager:
         await websocket.close(code=1011, reason="Session manager not initialized")
@@ -396,7 +400,7 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
     logger.info(f"Client {client_id} connected to session {session_code}. Active connections: {len(active_connections)}")
     
     try:
-        # Send initial metadata (MessagePack binary format for 60% size reduction)
+        # Send initial metadata as JSON
         metadata = playback_engine.get_metadata()
         metadata_msg = {
             "type": "metadata",
@@ -404,6 +408,123 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
             "session": {
                 "code": session_code,
                 "url": f"ws://localhost:{settings.port}/stream/{session_code}"
+            }
+        }
+        await websocket.send_json(metadata_msg)
+        
+        # Start streaming packets with optional filters
+        async for packet in playback_engine.stream(loop=True, trial_filter=trial_id, target_filter=target_id):
+            try:
+                # Mesurer la latence tick-to-network
+                tick_generation_time = packet.timestamp
+                
+                # Send packet via LSL if enabled
+                if lsl_streamer:
+                    await lsl_streamer.push_packet_async(packet)
+                
+                # Send packet as JSON
+                packet_msg = {
+                    "type": "data",
+                    "data": packet.model_dump()
+                }
+                await websocket.send_json(packet_msg)
+                
+                # Calculer et enregistrer la latence réseau
+                network_send_time = time.time()
+                network_latency = network_send_time - tick_generation_time
+                playback_engine._network_latencies.append(network_latency)
+                
+                # Check if client sent any control messages
+                # (non-blocking receive with timeout)
+                try:
+                    message = await asyncio.wait_for(
+                        websocket.receive_text(),
+                        timeout=0.001
+                    )
+                    # Handle control messages if needed
+                    logger.debug(f"Received message from client: {message}")
+                except asyncio.TimeoutError:
+                    pass  # No message received, continue streaming
+                
+            except WebSocketDisconnect:
+                logger.info(f"Client {client_id} disconnected during streaming")
+                break
+            except Exception as e:
+                logger.error(f"Error sending packet to client {client_id}: {e}")
+                break
+    
+    except WebSocketDisconnect:
+        logger.info(f"Client {client_id} disconnected from session {session_code}")
+    except Exception as e:
+        logger.error(f"Error in WebSocket connection {client_id} (session {session_code}): {e}")
+    finally:
+        active_connections.discard(websocket)
+        session_manager.decrement_connections(session_code)
+        logger.info(f"Client {client_id} removed from session {session_code}. Active connections: {len(active_connections)}")
+
+
+@app.websocket("/stream/binary/{session_code}")
+async def websocket_stream_binary(websocket: WebSocket, session_code: str, 
+                                  trial_id: Optional[int] = None, target_id: Optional[int] = None):
+    """
+    WebSocket endpoint for 40Hz neural data streaming with session isolation (Binary/MessagePack format).
+    
+    Path parameters:
+        session_code: Session identifier (e.g., 'swift-neural-42')
+    
+    Query parameters:
+        trial_id: Filter to only stream packets from this trial
+        target_id: Filter to only stream packets reaching for this target index
+    
+    Clients connect to ws://localhost:8000/stream/binary/{session_code} to receive real-time
+    packets containing time-aligned spike counts and behavioral ground truth in MessagePack binary format.
+    
+    Performance benefits over JSON endpoint:
+    - ~60% smaller payload size (6KB vs 15KB per packet for 142 channels)
+    - ~3-5x faster serialization/deserialization
+    - Lower CPU overhead for high-frequency streaming
+    
+    Each session has independent playback state (position, pause, filters).
+    """
+    if not session_manager:
+        await websocket.close(code=1011, reason="Session manager not initialized")
+        return
+    
+    # Get or create session
+    playback_engine = session_manager.get_session(session_code)
+    if not playback_engine:
+        # Auto-create session if it doesn't exist
+        logger.info(f"Auto-creating session: {session_code}")
+        session_manager.create_session(session_code)
+        playback_engine = session_manager.get_session(session_code)
+    
+    await websocket.accept()
+    active_connections.add(websocket)
+    session_manager.increment_connections(session_code)
+    
+    # Initialize LSL streamer for this session if enabled
+    lsl_streamer = None
+    if lsl_manager and settings.lsl_enabled:
+        lsl_streamer = lsl_manager.get_streamer(session_code)
+        if not lsl_streamer:
+            # Create LSL streamer for this session
+            metadata = playback_engine.get_metadata()
+            lsl_streamer = lsl_manager.create_streamer(session_code, metadata.num_channels)
+            if lsl_streamer:
+                logger.info(f"LSL streaming enabled for session {session_code}")
+    
+    client_id = id(websocket)
+    logger.info(f"Client {client_id} connected to binary stream session {session_code}. Active connections: {len(active_connections)}")
+    
+    try:
+        # Send initial metadata (MessagePack binary format for 60% size reduction)
+        metadata = playback_engine.get_metadata()
+        metadata_msg = {
+            "type": "metadata",
+            "data": metadata.model_dump(),
+            "session": {
+                "code": session_code,
+                "url": f"ws://localhost:{settings.port}/stream/binary/{session_code}"
             }
         }
         binary_metadata = serialize_for_websocket("metadata", metadata_msg["data"])
@@ -441,20 +562,20 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
                     pass  # No message received, continue streaming
                 
             except WebSocketDisconnect:
-                logger.info(f"Client {client_id} disconnected during streaming")
+                logger.info(f"Client {client_id} disconnected during binary streaming")
                 break
             except Exception as e:
-                logger.error(f"Error sending packet to client {client_id}: {e}")
+                logger.error(f"Error sending binary packet to client {client_id}: {e}")
                 break
     
     except WebSocketDisconnect:
-        logger.info(f"Client {client_id} disconnected from session {session_code}")
+        logger.info(f"Client {client_id} disconnected from binary stream session {session_code}")
     except Exception as e:
-        logger.error(f"Error in WebSocket connection {client_id} (session {session_code}): {e}")
+        logger.error(f"Error in binary WebSocket connection {client_id} (session {session_code}): {e}")
     finally:
         active_connections.discard(websocket)
         session_manager.decrement_connections(session_code)
-        logger.info(f"Client {client_id} removed from session {session_code}. Active connections: {len(active_connections)}")
+        logger.info(f"Client {client_id} removed from binary stream session {session_code}. Active connections: {len(active_connections)}")
 
 
 @app.get("/metrics")
