@@ -151,9 +151,9 @@ class MC_MazeLoader:
                 bin_indices = np.floor((spikes_in_window - start_time) / bin_size_s).astype(int)
                 bin_indices = np.clip(bin_indices, 0, num_bins - 1)
                 
-                # Count spikes in each bin
-                for bin_idx in bin_indices:
-                    spike_counts[bin_idx, unit_idx] += 1
+                # Count spikes in each bin using vectorized operation
+                bin_counts = np.bincount(bin_indices, minlength=num_bins)
+                spike_counts[:, unit_idx] = bin_counts[:num_bins]
                     
             except Exception as e:
                 logger.warning(f"Error processing unit {unit_idx}: {e}")
