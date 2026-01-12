@@ -17,6 +17,7 @@ PhantomLink Core streams pre-recorded neural data from the MC_Maze dataset at 40
 ## Features
 
 ✅ **40Hz Real-Time Streaming** - WebSocket endpoint with sub-millisecond timing accuracy  
+✅ **Multi-Session Isolation** - Independent streams with shareable URLs (ChatGPT-style)  
 ✅ **Intent-Based Calibration API** - Query trials by target, filter streams by intention  
 ✅ **Lazy Loading** - Memory-mapped HDF5 access, no RAM bottleneck  
 ✅ **Time-Aligned Payloads** - Spike counts + cursor kinematics synchronized to 25ms bins  
@@ -76,20 +77,53 @@ python main.py
 Expected output:
 ```
 INFO - Starting PhantomLink Core server
+INFO - Using NWB dataset: data\mc_maze.nwb
+INFO - Initializing shared data loader: data\mc_maze.nwb
 INFO - Opened NWB file: data\mc_maze.nwb
 INFO - Found 142 neural units
 INFO - Found processing module: behavior
 INFO -   - cursor_pos: (287710, 2), sampling rate: 1000.0Hz
 INFO -   - hand_vel: (287710, 2)
 INFO - Found 100 trials
-INFO - Dataset loaded: 142 channels, 293.7s duration, 11746 timesteps
+INFO - Shared loader ready: 142 channels, 293.7s, 100 trials
 INFO - Server ready on 0.0.0.0:8000
+INFO - Session-based isolation enabled (max 10 sessions)
 INFO - Uvicorn running on http://0.0.0.0:8000
 ```
 
-Server is now streaming at **ws://localhost:8000/stream**
+Server is now ready for multi-session streaming!
 
 ## Testing the Stream
+
+### Test Multi-Session Architecture
+
+Test session isolation and concurrent streaming:
+
+```bash
+python test_multi_session.py
+```
+
+Expected output:
+```
+=== PhantomLink Multi-Session Test Suite ===
+
+[1/4] Creating session...
+✓ Created session: neural-link-18
+  Stream URL: ws://localhost:8000/stream/neural-link-18
+
+[2/4] Listing sessions...
+=== Active Sessions (1) ===
+Session: neural-link-18
+  Age: 3s | Idle: 3s | Connections: 0
+  Running: False | Position: packet 0
+
+[3/4] Testing stream from session...
+✓ Received 201 packets in 5s (40.1 Hz)
+
+[4/4] Testing session isolation...
+✓ Paused session1, session2 streams independently
+✓ Sessions are isolated
+```
 
 ### Validate 40Hz Integrity
 
@@ -170,6 +204,61 @@ Unique target positions: 2
 
 ## API Reference
 
+### Session Management
+
+PhantomLink uses **session-based isolation** - each session gets its own independent playback state with a shareable URL (similar to ChatGPT conversations). Sessions auto-expire after 1 hour of inactivity.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/sessions/create` | POST | Create new session with optional custom code |
+| `/api/sessions` | GET | List all active sessions with stats |
+| `/api/sessions/{session_code}` | GET | Get specific session details |
+| `/api/sessions/{session_code}` | DELETE | Delete a session |
+| `/api/sessions/cleanup` | POST | Manually trigger expired session cleanup |
+
+**Create Session Example:**
+```bash
+# Auto-generated code (e.g., "swift-neural-42")
+curl -X POST http://localhost:8000/api/sessions/create
+
+# Custom code
+curl -X POST http://localhost:8000/api/sessions/create \
+  -H "Content-Type: application/json" \
+  -d '{"custom_code": "my-experiment-1"}'
+
+# Response
+{
+  "session_code": "swift-neural-42",
+  "stream_url": "ws://localhost:8000/stream/swift-neural-42",
+  "created_at": "2026-01-12T13:30:00Z"
+}
+```
+
+**List Sessions Example:**
+```bash
+curl http://localhost:8000/api/sessions
+
+# Response
+{
+  "sessions": {
+    "swift-neural-42": {
+      "created_at": "2026-01-12T13:30:00Z",
+      "last_accessed": "2026-01-12T13:32:15Z",
+      "active_connections": 2,
+      "is_running": true,
+      "current_packet": 150
+    }
+  },
+  "stats": {
+    "total_sessions": 3,
+    "max_sessions": 10,
+    "session_ttl": 3600,
+    "active_connections": 5,
+    "running_sessions": 2
+  }
+}
+```
+
 ### REST Endpoints
 
 | Endpoint | Method | Description |
@@ -177,20 +266,33 @@ Unique target positions: 2
 | `/` | GET | API information and status |
 | `/health` | GET | Health check |
 | `/api/metadata` | GET | Dataset metadata (channels, duration, etc.) |
-| `/api/stats` | GET | Current playback statistics |
+| `/api/stats` | GET | Global playback statistics |
 | `/api/trials` | GET | List all trials with target/intention data |
 | `/api/trials/{trial_id}` | GET | Get specific trial information |
 | `/api/trials/by-target/{target_index}` | GET | Get all trials reaching for a specific target |
-| `/api/control/pause` | POST | Pause playback |
-| `/api/control/resume` | POST | Resume playback |
-| `/api/control/stop` | POST | Stop playback |
-| `/api/control/seek?position_seconds=X` | POST | Seek to position |
+
+**Session-Specific Control Endpoints:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/control/{session_code}/pause` | POST | Pause playback for this session |
+| `/api/control/{session_code}/resume` | POST | Resume playback for this session |
+| `/api/control/{session_code}/stop` | POST | Stop playback for this session |
+| `/api/control/{session_code}/seek?position_seconds=X` | POST | Seek to position in this session |
+| `/api/control/{session_code}/metadata` | GET | Get session-specific metadata |
+| `/api/control/{session_code}/stats` | GET | Get session-specific statistics |
 
 ### WebSocket Stream
 
-**Endpoint**: `ws://localhost:8000/stream`  
+**Endpoint**: `ws://localhost:8000/stream/{session_code}`  
 **Frequency**: 40Hz (25ms intervals)  
 **Protocol**: JSON packets
+
+**Session Behavior:**
+- Sessions are **auto-created** on first WebSocket connection if they don't exist
+- Each session has **independent playback state** (pause one, stream from another)
+- Sessions **expire after 1 hour** of inactivity (configurable)
+- Maximum **10 concurrent sessions** (configurable, LRU eviction)
 
 **Query Parameters** (optional):
 - `trial_id` - Filter to only stream packets from a specific trial (0-99)
@@ -198,14 +300,25 @@ Unique target positions: 2
 
 **Examples**:
 ```bash
-# All packets
-ws://localhost:8000/stream
+# Auto-create session and stream all packets
+ws://localhost:8000/stream/my-experiment-1
 
-# Only trial 5
-ws://localhost:8000/stream?trial_id=5
+# Pre-create session with readable code
+curl -X POST http://localhost:8000/api/sessions/create
+# Returns: {"session_code": "swift-neural-42", ...}
 
-# Only reaching for target 0 (77 trials)
-ws://localhost:8000/stream?target_id=0
+# Stream from created session
+ws://localhost:8000/stream/swift-neural-42
+
+# Stream only trial 5 from session
+ws://localhost:8000/stream/swift-neural-42?trial_id=5
+
+# Stream only reaching for target 0 (77 trials)
+ws://localhost:8000/stream/neural-link-18?target_id=0
+
+# Multiple clients can connect to same session
+ws://localhost:8000/stream/swift-neural-42  # Client 1
+ws://localhost:8000/stream/swift-neural-42  # Client 2 (shares state)
 ```
 
 ## Data Format
@@ -256,13 +369,31 @@ Each 40Hz packet contains time-aligned data at 25ms resolution:
 ### System Design
 
 ```
-Client (WebSocket) ←→ FastAPI Server ←→ PlaybackEngine ←→ DataLoader ←→ NWB File
-                                              ↓
-                                        40Hz Asyncio Loop
-                                        (25ms precision)
+Client (WebSocket) ←→ FastAPI Server ←→ SessionManager ←→ PlaybackEngine(s) ←→ Shared DataLoader ←→ NWB File
+                                              ↓                    ↓
+                                        Session Isolation    40Hz Asyncio Loop
+                                        (max 10, LRU)       (25ms precision)
 ```
 
+**Multi-Session Architecture:**
+- **Shared DataLoader**: Single memory-mapped NWB file instance (read-only, efficient)
+- **Per-Session PlaybackEngine**: Independent playback state for each session
+- **Session Isolation**: Pause/resume/seek in one session doesn't affect others
+- **Shareable URLs**: Each session gets a unique code (e.g., `swift-neural-42`)
+- **LRU Eviction**: When hitting max sessions, oldest is removed
+- **TTL Cleanup**: Background task removes expired sessions every 5 minutes
+
 ### Key Components
+
+**`session_manager.py`** - SessionManager class  
+- Creates and manages multiple isolated sessions
+- Generates readable session codes: `{adjective}-{noun}-{number}`
+- Maintains single shared `MC_MazeLoader` instance (efficient memory-mapped access)
+- Creates per-session `PlaybackEngine` instances (independent state)
+- LRU eviction when hitting max_sessions limit (default: 10)
+- TTL-based cleanup (default: 3600s = 1 hour)
+- Background cleanup task runs every 5 minutes
+- Thread-safe session access and management
 
 **`data_loader.py`** - MC_MazeLoader class  
 - Lazy-loads NWB file with pynwb + HDF5 memory mapping
@@ -279,11 +410,14 @@ Client (WebSocket) ←→ FastAPI Server ←→ PlaybackEngine ←→ DataLoader
 - Handles pause/resume/seek controls
 - Generates StreamPacket objects with real trial context
 
-**`server.py`** - FastAPI applicatwith optional `trial_id`/`target_id` filters
-- REST API for control, metadata, and trial queries
-- REST API for control and metadata
-- Detects `.nwb` files in `data/` directory
-- Non-blocking async design
+**`server.py`** - FastAPI application  
+- Session-based multi-client architecture (refactored from single-engine)
+- Global `SessionManager` managing multiple `PlaybackEngine` instances
+- WebSocket endpoint `/stream/{session_code}` with auto-session creation
+- Session-specific REST control endpoints (`/api/control/{session_code}/pause`)
+- Session management endpoints (create, list, delete, cleanup)
+- Background cleanup task: `periodic_cleanup()` runs every 5 minutes
+- Non-blocking async design with per-session connection tracking
 
 **`models.py`** - Pydantic data models  
 - StreamPacket, SpikeData, Kinematics, TargetIntention
@@ -293,9 +427,12 @@ Client (WebSocket) ←→ FastAPI Server ←→ PlaybackEngine ←→ DataLoader
 
 - **Packet Generation**: ~7ms (HDF5 read + binning)
 - **Timing Precision**: <1ms std deviation
-- **Memory Footprint**: <500MB (memory-mapped file)
-- **Throughput**: 40Hz sustained for hours
+- **Memory Footprint**: <500MB (memory-mapped file, shared across sessions)
+- **Throughput**: 40Hz sustained for hours per session
 - **Latency**: 25ms ± 0.5ms per packet
+- **Session Overhead**: ~50KB per session (independent PlaybackEngine state)
+- **Max Concurrent Sessions**: 10 (configurable, LRU eviction)
+- **Session TTL**: 3600s (1 hour, configurable)
 
 ### Design Principles
 
@@ -304,6 +441,8 @@ Client (WebSocket) ←→ FastAPI Server ←→ PlaybackEngine ←→ DataLoader
 3. **Precise Timing**: Asyncio sleep with error tracking
 4. **Type Safety**: Pydantic models for all data structures
 5. **Fail Fast**: Errors propagate immediately, no silent failures
+6. **Session Isolation**: Independent playback states, shareable URLs
+7. **Resource Efficiency**: Shared DataLoader, per-session engines
 
 ## Development
 
@@ -317,10 +456,12 @@ PhantomLink/
 ├── models.py               # Pydantic data models
 ├── data_loader.py          # NWB file loader with trial parsing
 ├── playback_engine.py      # 40Hz streaming engine with filtering
-├── server.py               # FastAPI application with calibration API
+├── session_manager.py      # Multi-session isolation manager
+├── server.py               # FastAPI application with session API
 ├── main.py                 # Entry point
 ├── test_client.py          # Stream validation client
 ├── test_calibration.py     # Intent-based filtering tests
+├── test_multi_session.py   # Multi-session isolation tests
 ├── investigate_nwb.py      # NWB structure exploration tool
 ├── requirements.txt        # Python dependencies
 └── README.md              # This file (single source of truth)
@@ -400,15 +541,48 @@ kinematics=Kinematics(
 
 ## Use Cases
 
-### 1. Decoder Development
+### 1. Multi-User Calibration Sessions
+Share independent calibration sessions with team members:
+
+```python
+import requests
+import websockets
+import json
+
+# Team lead creates sessions for each user
+sessions = []
+for user in ['alice', 'bob', 'charlie']:
+    response = requests.post('http://localhost:8000/api/sessions/create',
+                            json={'custom_code': f'calibration-{user}'})
+    sessions.append(response.json())
+    print(f"{user}: {response.json()['stream_url']}")
+
+# Each user gets their own independent stream
+# alice: ws://localhost:8000/stream/calibration-alice
+# bob: ws://localhost:8000/stream/calibration-bob
+# charlie: ws://localhost:8000/stream/calibration-charlie
+
+# Users can pause/resume independently
+requests.post('http://localhost:8000/api/control/calibration-alice/pause')
+# Bob and Charlie's streams continue unaffected
+```
+
+### 2. Decoder Development
+### 2. Decoder Development
 Stream neural data with known intentions to train and validate BCI decoders:
 
 ```python
 import websockets
 import json
+import requests
+
+# Create dedicated session for training
+response = requests.post('http://localhost:8000/api/sessions/create',
+                        json={'custom_code': 'decoder-training-v1'})
+session_url = response.json()['stream_url']
 
 # Connect and filter for specific target
-async with websockets.connect('ws://localhost:8000/stream?target_id=0') as ws:
+async with websockets.connect(f'{session_url}?target_id=0') as ws:
     async for message in ws:
         packet = json.loads(message)['data']
         spikes = packet['spikes']['spike_counts']
@@ -416,7 +590,7 @@ async with websockets.connect('ws://localhost:8000/stream?target_id=0') as ws:
         # Train decoder: spikes -> target
 ```
 
-### 2. Calibration Workflows
+### 3. Calibration Workflows
 Query trials to build calibration sets:
 
 ```python
@@ -426,18 +600,32 @@ import requests
 response = requests.get('http://localhost:8000/api/trials/by-target/0')
 trials = response.json()['trials']  # 77 trials
 
+# Create session for calibration
+session = requests.post('http://localhost:8000/api/sessions/create',
+                       json={'custom_code': 'calibration-target0'}).json()
+
 # Stream data from each calibration trial
 for trial in trials[:10]:  # First 10 trials
     trial_id = trial['trial_id']
-    # Connect to ws://localhost:8000/stream?trial_id={trial_id}
+    stream_url = f"{session['stream_url']}?trial_id={trial_id}"
+    # Connect to stream_url and collect calibration data
 ```
 
-### 3. Ground Truth Valida12, 2026  
-**Status**: ✅ MVP Complete - 40Hz streaming validated with intent-based calibration API
+### 4. Ground Truth Validation
+### 4. Ground Truth Validation
+Validate decoder predictions against real target positions:
 
 ```python
+import websockets
+import json
+import requests
+
+# Create validation session
+session = requests.post('http://localhost:8000/api/sessions/create',
+                       json={'custom_code': 'validation-run1'}).json()
+
 # Stream with known targets
-async with websockets.connect('ws://localhost:8000/stream') as ws:
+async with websockets.connect(session['stream_url']) as ws:
     async for message in ws:
         packet = json.loads(message)['data']
         
@@ -459,16 +647,17 @@ async with websockets.connect('ws://localhost:8000/stream') as ws:
 - Cursor trajectory plotting
 - Decoder performance metrics
 - WebSocket client in React/TypeScript
+- Session management UI (create, list, delete sessions)
 
 **Phase 3: Decoder Integration**
 - Kalman filter decoder implementation
 - Online calibration endpoint
 - Ground truth comparison metrics
-- A/B testing framework
+- A/B testing framework with session isolation
 
 **Phase 4: Multi-Dataset Support**
 - Switch between different NWB files
-- Dataset selection API endpoint
+- Dataset selection API endpoint per session
 - Unified metadata format
 - Recording mode for saving streams
 
@@ -486,8 +675,8 @@ Research use only. Dataset from [Neural Latents Benchmark](https://neurallatents
 
 ---
 
-**Last Updated**: January 2026  
-**Status**: ✅ MVP Complete - 40Hz streaming validated with real MC_Maze data
+**Last Updated**: January 12, 2026  
+**Status**: ✅ MVP Complete - Multi-session architecture with 40Hz streaming and intent-based calibration API
 
 ## Troubleshooting
 
@@ -521,11 +710,39 @@ dandi download https://dandiarchive.org/dandiset/000140/draft
 # Test health endpoint
 curl http://localhost:8000/health
 
+# Check if sessions are running
+curl http://localhost:8000/api/sessions
+
 # Check firewall (Windows)
 netsh advfirewall firewall add rule name="PhantomLink" dir=in action=allow protocol=TCP localport=8000
 
 # Try 127.0.0.1 instead of localhost
-ws://127.0.0.1:8000/stream
+ws://127.0.0.1:8000/stream/my-session
+```
+
+**Session not found**
+```bash
+# List active sessions
+curl http://localhost:8000/api/sessions
+
+# Create session explicitly before connecting
+curl -X POST http://localhost:8000/api/sessions/create \
+  -H "Content-Type: application/json" \
+  -d '{"custom_code": "my-session"}'
+
+# Or let WebSocket auto-create on connect
+ws://localhost:8000/stream/my-session
+```
+
+**Too many sessions (max limit reached)**
+```bash
+# Delete unused sessions
+curl -X DELETE http://localhost:8000/api/sessions/{session_code}
+
+# Trigger cleanup of expired sessions
+curl -X POST http://localhost:8000/api/sessions/cleanup
+
+# Oldest sessions auto-evicted via LRU when hitting limit
 ```
 
 **AttributeError: 'VectorIndex' object has no attribute 'item'**
