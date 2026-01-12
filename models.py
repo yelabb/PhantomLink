@@ -57,3 +57,4 @@ class StreamMetadata(BaseModel):
     frequency_hz: int = Field(description="Stream frequency in Hz")
     num_channels: int = Field(description="Number of neural channels")
     duration_seconds: float = Field(description="Total duration of dataset")
+    num_trials: int = Field(description="Number of trials in dataset")

@@ -72,7 +72,8 @@ class PlaybackEngine:
             total_packets=self.loader.num_timesteps,
             frequency_hz=settings.stream_frequency_hz,
             num_channels=self.loader.num_channels,
-            duration_seconds=self.loader.duration
+            duration_seconds=self.loader.duration,
+            num_trials=len(self.loader.get_trials())
         )
     
     async def stream(self, loop: bool = True, trial_filter: Optional[int] = None, 
