@@ -7,6 +7,7 @@ while sharing the underlying DataLoader (read-only, memory-mapped).
 import logging
 import time
 import secrets
+import sys
 from typing import Dict, Optional, List
 from pathlib import Path
 from collections import OrderedDict
@@ -246,6 +247,72 @@ class SessionManager:
             'shared_loader_channels': self.shared_loader.num_channels if self.shared_loader else 0,
             'shared_loader_trials': len(self.shared_loader.get_trials()) if self.shared_loader else 0
         }
+    
+    def get_memory_usage_per_session(self) -> Dict[str, Dict]:
+        """Get memory usage statistics for each session."""
+        memory_stats = {}
+        
+        for session_code, session_data in self.sessions.items():
+            engine = session_data['engine']
+            
+            # Calculer la taille approximative des objets Python
+            engine_size = sys.getsizeof(engine)
+            
+            # Ajouter la taille des données de l'engine
+            timing_errors_size = sys.getsizeof(engine._timing_errors)
+            network_latencies_size = sys.getsizeof(engine._network_latencies) if hasattr(engine, '_network_latencies') else 0
+            
+            total_size_bytes = engine_size + timing_errors_size + network_latencies_size
+            
+            memory_stats[session_code] = {
+                'total_bytes': total_size_bytes,
+                'total_mb': round(total_size_bytes / (1024 * 1024), 2),
+                'packets_sent': engine._packets_sent,
+                'timing_errors_count': len(engine._timing_errors),
+                'network_latencies_count': len(engine._network_latencies) if hasattr(engine, '_network_latencies') else 0
+            }
+        
+        return memory_stats
+    
+    def get_metrics(self) -> Dict:
+        """Get comprehensive metrics for all sessions (for /metrics endpoint)."""
+        metrics = {
+            'total_sessions': len(self.sessions),
+            'active_sessions': sum(1 for s in self.sessions.values() if s['engine'].is_running),
+            'total_connections': sum(s['connections'] for s in self.sessions.values()),
+            'sessions': {}
+        }
+        
+        # Métriques par session
+        for session_code, session_data in self.sessions.items():
+            engine = session_data['engine']
+            engine_stats = engine.get_stats()
+            
+            metrics['sessions'][session_code] = {
+                'packets_sent': engine_stats.get('packets_sent', 0),
+                'dropped_packets': engine_stats.get('dropped_packets', 0),
+                'network_latency_ms': {
+                    'mean': engine_stats.get('network_latency_mean_ms', 0),
+                    'std': engine_stats.get('network_latency_std_ms', 0),
+                    'max': engine_stats.get('network_latency_max_ms', 0)
+                },
+                'timing_error_ms': {
+                    'mean': engine_stats.get('timing_error_mean_ms', 0),
+                    'std': engine_stats.get('timing_error_std_ms', 0),
+                    'max': engine_stats.get('timing_error_max_ms', 0)
+                },
+                'is_running': engine_stats.get('is_running', False),
+                'is_paused': engine_stats.get('is_paused', False),
+                'connections': session_data['connections']
+            }
+        
+        # Ajouter l'utilisation mémoire
+        memory_usage = self.get_memory_usage_per_session()
+        for session_code, mem_stats in memory_usage.items():
+            if session_code in metrics['sessions']:
+                metrics['sessions'][session_code]['memory_usage_mb'] = mem_stats['total_mb']
+        
+        return metrics
     
     async def cleanup(self):
         """Cleanup all sessions and shared resources."""

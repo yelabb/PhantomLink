@@ -249,6 +249,56 @@ curl -X DELETE http://localhost:8000/api/sessions/{session_code}
 curl -X POST http://localhost:8000/api/sessions/cleanup
 ```
 
+### Metrics Endpoint
+
+Monitor system performance with real-time metrics:
+
+```bash
+curl http://localhost:8000/metrics
+```
+
+**Response:**
+```json
+{
+  "timestamp": 1705075200.123,
+  "service": "PhantomLink Core",
+  "version": "0.2.0",
+  "metrics": {
+    "total_sessions": 2,
+    "active_sessions": 1,
+    "total_connections": 1,
+    "sessions": {
+      "swift-neural-42": {
+        "packets_sent": 15230,
+        "dropped_packets": 3,
+        "network_latency_ms": {
+          "mean": 1.234,
+          "std": 0.456,
+          "max": 5.678
+        },
+        "timing_error_ms": {
+          "mean": 0.123,
+          "std": 0.089,
+          "max": 2.345
+        },
+        "memory_usage_mb": 12.45,
+        "is_running": true,
+        "is_paused": false,
+        "connections": 1
+      }
+    }
+  }
+}
+```
+
+**Key Metrics:**
+- **network_latency_ms**: Tick-to-network latency (generation → send)
+- **memory_usage_mb**: Memory consumed per session
+- **dropped_packets**: Failed packet transmissions
+- **timing_error_ms**: Deviation from target 40Hz timing
+
+📊 See [METRICS_GUIDE.md](docs/METRICS_GUIDE.md) for detailed monitoring documentation.
+
 ### WebSocket Streaming
 
 #### Connect to Stream

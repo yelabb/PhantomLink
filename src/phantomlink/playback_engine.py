@@ -164,6 +164,8 @@ class PlaybackEngine:
         # Performance metrics
         self._packets_sent = 0
         self._timing_errors = []
+        self._dropped_packets = 0
+        self._network_latencies = []  # Time from packet generation to network send
         
     async def initialize(self):
         """Initialize the data loader and prepare for streaming."""
@@ -416,17 +418,28 @@ class PlaybackEngine:
     
     def get_stats(self) -> dict:
         """Get playback statistics."""
-        if not self._timing_errors:
-            return {}
-        
-        recent_errors = self._timing_errors[-1000:] if len(self._timing_errors) > 1000 else self._timing_errors
-        
-        return {
+        stats = {
             'packets_sent': self._packets_sent,
+            'dropped_packets': self._dropped_packets,
             'current_index': self._current_index,
             'is_running': self.is_running,
             'is_paused': self.is_paused,
-            'timing_error_mean_ms': float(np.mean(recent_errors) * 1000),
-            'timing_error_std_ms': float(np.std(recent_errors) * 1000),
-            'timing_error_max_ms': float(np.max(np.abs(recent_errors)) * 1000)
         }
+        
+        if self._timing_errors:
+            recent_errors = self._timing_errors[-1000:] if len(self._timing_errors) > 1000 else self._timing_errors
+            stats.update({
+                'timing_error_mean_ms': float(np.mean(recent_errors) * 1000),
+                'timing_error_std_ms': float(np.std(recent_errors) * 1000),
+                'timing_error_max_ms': float(np.max(np.abs(recent_errors)) * 1000)
+            })
+        
+        if self._network_latencies:
+            recent_latencies = self._network_latencies[-1000:] if len(self._network_latencies) > 1000 else self._network_latencies
+            stats.update({
+                'network_latency_mean_ms': float(np.mean(recent_latencies) * 1000),
+                'network_latency_std_ms': float(np.std(recent_latencies) * 1000),
+                'network_latency_max_ms': float(np.max(recent_latencies) * 1000)
+            })
+        
+        return stats

@@ -412,6 +412,9 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
         # Start streaming packets with optional filters
         async for packet in playback_engine.stream(loop=True, trial_filter=trial_id, target_filter=target_id):
             try:
+                # Mesurer la latence tick-to-network
+                tick_generation_time = packet.timestamp
+                
                 # Send packet via LSL if enabled
                 if lsl_streamer:
                     await lsl_streamer.push_packet_async(packet)
@@ -419,6 +422,11 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
                 # Send packet as MessagePack binary (60% smaller, 3-5x faster than JSON)
                 binary_packet = serialize_for_websocket("data", packet)
                 await websocket.send_bytes(binary_packet)
+                
+                # Calculer et enregistrer la latence réseau
+                network_send_time = time.time()
+                network_latency = network_send_time - tick_generation_time
+                playback_engine._network_latencies.append(network_latency)
                 
                 # Check if client sent any control messages
                 # (non-blocking receive with timeout)
@@ -447,6 +455,29 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
         active_connections.discard(websocket)
         session_manager.decrement_connections(session_code)
         logger.info(f"Client {client_id} removed from session {session_code}. Active connections: {len(active_connections)}")
+
+
+@app.get("/metrics")
+async def get_metrics():
+    """
+    Endpoint de métriques pour le monitoring système.
+    
+    Expose:
+    - Latency tick-to-network par session
+    - Memory usage par session
+    - Nombre de paquets droppés par session
+    """
+    if not session_manager:
+        raise HTTPException(status_code=503, detail="Session manager not initialized")
+    
+    metrics = session_manager.get_metrics()
+    
+    return {
+        "timestamp": time.time(),
+        "service": "PhantomLink Core",
+        "version": "0.2.0",
+        "metrics": metrics
+    }
 
 
 @app.get("/health")
