@@ -8,16 +8,16 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg)](https://fastapi.tiangolo.com)
 [![License](https://img.shields.io/badge/license-Research-green.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-MVP_Complete-success.svg)](https://github.com/yelabb/PhantomLink)
-[![Data Analysis](https://img.shields.io/badge/📊_Data_Analysis-Notebook-orange.svg)](data_analysis.ipynb)
-[![Beginner's Guide](https://img.shields.io/badge/📚_Beginner's_Guide-Learn-blue.svg)](BEGINNERS_GUIDE.md)
+[![Data Analysis](https://img.shields.io/badge/📊_Data_Analysis-Notebook-orange.svg)](notebooks/data_analysis.ipynb)
+[![Beginner's Guide](https://img.shields.io/badge/📚_Beginner's_Guide-Learn-blue.svg)](docs/BEGINNERS_GUIDE.md)
 
 **The Ethereal/Mailtrap for Neurotechnology**
 
 *Stream pre-recorded neural data at 40Hz with microsecond precision, simulating live brain-computer interface signals for decoder development, calibration workflows, and ground truth validation.*
 
-> **New to Brain-Computer Interfaces?** Check out our [Complete Beginner's Guide](BEGINNERS_GUIDE.md) for an educational introduction to BCIs, neural data, and how PhantomLink works!
+> **New to Brain-Computer Interfaces?** Check out our [Complete Beginner's Guide](docs/BEGINNERS_GUIDE.md) for an educational introduction to BCIs, neural data, and how PhantomLink works!
 
-[Quick Start](#-quick-start) • [Features](#-features) • [API Documentation](#-api-reference) • [Architecture](#-architecture) • [Contributing](#-contributing) • [📚 Beginner's Guide](BEGINNERS_GUIDE.md)
+[Quick Start](#-quick-start) • [Features](#-features) • [API Documentation](#-api-reference) • [Architecture](#-architecture) • [Contributing](#-contributing) • [📚 Beginner's Guide](docs/BEGINNERS_GUIDE.md)
 
 </div>
 
