@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     lsl_stream_type: str = "EEG"  # Stream type for LSL
     lsl_source_id: str = "PhantomLink-001"
     
+    # Noise Injection Configuration (pour simulation réaliste)
+    noise_injection_enabled: bool = False  # Active l'injection de bruit par défaut
+    noise_std: float = 0.5  # Écart-type du bruit blanc gaussien
+    drift_amplitude: float = 0.2  # Amplitude de la dérive non-stationnaire
+    drift_period_seconds: float = 60.0  # Période de la dérive (fatigue neuronale)
+    
     class Config:
         env_prefix = "PHANTOM_"
 

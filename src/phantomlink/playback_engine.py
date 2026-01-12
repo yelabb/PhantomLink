@@ -20,6 +20,116 @@ from phantomlink.data_loader import MC_MazeLoader
 logger = logging.getLogger(__name__)
 
 
+class NoiseInjectionMiddleware:
+    """
+    Middleware pour injecter du bruit réaliste dans les données neuronales.
+    
+    Simule les conditions de production en ajoutant :
+    - Bruit blanc gaussien sur les taux de décharge
+    - Dérive non-stationnaire (fatigue neuronale, micro-mouvement de l'implant)
+    
+    Transforme l'outil de "lecteur" en véritable "simulateur de stress-test".
+    """
+    
+    def __init__(self, 
+                 noise_std: float = 0.5,
+                 drift_amplitude: float = 0.2,
+                 drift_period_seconds: float = 60.0,
+                 enable_noise: bool = True,
+                 enable_drift: bool = True):
+        """
+        Initialise le middleware d'injection de bruit.
+        
+        Args:
+            noise_std: Écart-type du bruit gaussien (proportion du signal)
+            drift_amplitude: Amplitude de la dérive (proportion du signal)
+            drift_period_seconds: Période de la dérive en secondes
+            enable_noise: Active/désactive l'injection de bruit blanc
+            enable_drift: Active/désactive l'injection de dérive
+        """
+        self.noise_std = noise_std
+        self.drift_amplitude = drift_amplitude
+        self.drift_period_seconds = drift_period_seconds
+        self.enable_noise = enable_noise
+        self.enable_drift = enable_drift
+        
+        # État interne pour la dérive
+        self._drift_offset = None
+        self._time_start = None
+        
+        logger.info(f"NoiseInjectionMiddleware initialized: noise_std={noise_std}, "
+                   f"drift_amplitude={drift_amplitude}, drift_period={drift_period_seconds}s")
+    
+    def reset(self):
+        """Reset l'état du middleware."""
+        self._drift_offset = None
+        self._time_start = None
+    
+    def inject_noise(self, packet: StreamPacket, elapsed_time: float) -> StreamPacket:
+        """
+        Injecte du bruit et de la dérive dans un paquet de données.
+        
+        Args:
+            packet: Paquet original
+            elapsed_time: Temps écoulé depuis le début du stream (en secondes)
+        
+        Returns:
+            Paquet modifié avec bruit et dérive
+        """
+        if not (self.enable_noise or self.enable_drift):
+            return packet
+        
+        # Initialisation de la dérive si première utilisation
+        if self._drift_offset is None:
+            num_channels = len(packet.spikes.spike_counts)
+            # Dérive unique par canal (certains canaux dérivent plus que d'autres)
+            self._drift_offset = np.random.randn(num_channels) * 0.3
+            self._time_start = elapsed_time
+        
+        # Convertir spike_counts en numpy array
+        spike_counts = np.array(packet.spikes.spike_counts, dtype=float)
+        original_mean = np.mean(spike_counts)
+        
+        # 1. Injection de bruit blanc gaussien
+        if self.enable_noise and original_mean > 0:
+            # Bruit proportionnel à l'intensité du signal
+            noise = np.random.randn(len(spike_counts)) * self.noise_std * (spike_counts + 1)
+            spike_counts = spike_counts + noise
+        
+        # 2. Injection de dérive non-stationnaire
+        if self.enable_drift:
+            # Temps relatif depuis le début
+            t = elapsed_time - self._time_start
+            
+            # Composante de dérive lente (fatigue neuronale)
+            slow_drift = self.drift_amplitude * np.sin(2 * np.pi * t / self.drift_period_seconds)
+            
+            # Composante de dérive rapide (micro-mouvement de l'implant)
+            fast_drift = 0.1 * self.drift_amplitude * np.sin(2 * np.pi * t / (self.drift_period_seconds / 10))
+            
+            # Appliquer la dérive avec offset par canal
+            drift = (slow_drift + fast_drift) * (spike_counts + 1) * (1 + self._drift_offset)
+            spike_counts = spike_counts + drift
+        
+        # S'assurer que les comptes restent non-négatifs (arrondir à 0)
+        spike_counts = np.maximum(0, spike_counts)
+        
+        # Créer nouveau paquet avec données bruitées
+        return StreamPacket(
+            timestamp=packet.timestamp,
+            sequence_number=packet.sequence_number,
+            spikes=SpikeData(
+                channel_ids=packet.spikes.channel_ids,
+                spike_counts=spike_counts.astype(int).tolist(),
+                bin_size_ms=packet.spikes.bin_size_ms
+            ),
+            kinematics=packet.kinematics,
+            intention=packet.intention,
+            trial_id=packet.trial_id,
+            trial_time_ms=packet.trial_time_ms
+        )
+
+
 class PlaybackEngine:
     """
     40Hz playback engine with strict timing guarantees.
@@ -29,17 +139,22 @@ class PlaybackEngine:
     and precise timing control.
     """
     
-    def __init__(self, data_path: Path):
+    def __init__(self, data_path: Path, 
+                 noise_middleware: Optional[NoiseInjectionMiddleware] = None):
         """
         Initialize the playback engine.
         
         Args:
             data_path: Path to the dataset file
+            noise_middleware: Optional middleware pour injection de bruit réaliste
         """
         self.data_path = data_path
         self.loader: Optional[MC_MazeLoader] = None
         self.is_running = False
         self.is_paused = False
+        
+        # Middleware pour injection de bruit
+        self.noise_middleware = noise_middleware
         
         # Playback state
         self._current_index = 0
@@ -118,10 +233,18 @@ class PlaybackEngine:
                 if loop:
                     logger.info("Reached end of dataset, looping...")
                     self._current_index = 0
+                    # Reset noise middleware on loop
+                    if self.noise_middleware:
+                        self.noise_middleware.reset()
                     continue
                 else:
                     logger.info("Reached end of dataset, stopping stream")
                     break
+            
+            # Apply noise middleware if configured
+            if self.noise_middleware:
+                elapsed_time = time.time() - self._start_time
+                packet = self.noise_middleware.inject_noise(packet, elapsed_time)
             
             # Apply filters if specified
             if trial_filter is not None and packet.trial_id != trial_filter:
@@ -248,6 +371,9 @@ class PlaybackEngine:
         self._current_index = 0
         self._sequence_number = 0
         self._start_time = None
+        # Reset noise middleware
+        if self.noise_middleware:
+            self.noise_middleware.reset()
         logger.info("Playback reset to start")
     
     def pause(self):

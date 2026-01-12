@@ -78,6 +78,46 @@
 | **Trial Metadata API** | Query 100 trials with target positions and timing markers |
 | **Lazy Loading** | Memory-mapped HDF5 access, no RAM bottleneck |
 | **Built-in Validation** | Stream integrity testing and performance metrics |
+| **🎯 Realistic Noise Injection** | Stress-test mode with Gaussian noise + non-stationary drift for production robustness |
+
+### 🎯 Stress-Testing Mode (NEW!)
+
+**Problem**: Decoders trained on clean data fail in production due to neural noise, drift, and implant micro-movements.
+
+**Solution**: `NoiseInjectionMiddleware` transforms PhantomLink from a "playback tool" into a **stress-test simulator** by injecting:
+
+1. **Gaussian White Noise**: Realistic firing rate variability
+2. **Non-Stationary Drift**: Simulates neural fatigue and implant movement (slow + fast components)
+
+```python
+from phantomlink.playback_engine import PlaybackEngine, NoiseInjectionMiddleware
+
+# Configure stress-test mode
+middleware = NoiseInjectionMiddleware(
+    noise_std=0.5,              # Moderate Gaussian noise
+    drift_amplitude=0.3,         # 30% drift amplitude
+    drift_period_seconds=60.0,   # Neural fatigue over 60s
+    enable_noise=True,
+    enable_drift=True
+)
+
+# Create engine with stress-testing
+engine = PlaybackEngine(data_path, noise_middleware=middleware)
+```
+
+**Stress Levels**:
+- **Light**: `noise_std=0.2, drift_amplitude=0.1` - Minimal impairment
+- **Moderate**: `noise_std=0.5, drift_amplitude=0.3` - Realistic production conditions
+- **Intense**: `noise_std=1.0, drift_amplitude=0.5` - Challenging scenarios
+- **Extreme**: `noise_std=2.0, drift_amplitude=0.8` - Stress-test limits
+
+**Use Cases**:
+- 🔬 **Robustness Testing**: Validate decoder performance under realistic noise
+- 🏋️ **Stress-Testing**: Push algorithms to failure boundaries
+- 📊 **Comparative Analysis**: Benchmark decoders with/without noise
+- 🎓 **Training Augmentation**: Train decoders on noisy data for better generalization
+
+See [examples/noise_injection_demo.py](examples/noise_injection_demo.py) for complete examples and visualizations.
 
 ### Data Stream Format
 

@@ -16,7 +16,7 @@ from phantomlink.models import (
     TargetIntention
 )
 from phantomlink.data_loader import MC_MazeLoader
-from phantomlink.playback_engine import PlaybackEngine
+from phantomlink.playback_engine import PlaybackEngine, NoiseInjectionMiddleware
 from phantomlink.session_manager import SessionManager
 
 __all__ = [
@@ -28,5 +28,6 @@ __all__ = [
     "TargetIntention",
     "MC_MazeLoader",
     "PlaybackEngine",
+    "NoiseInjectionMiddleware",
     "SessionManager"
 ]
