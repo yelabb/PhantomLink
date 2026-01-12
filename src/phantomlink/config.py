@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     packet_interval_ms: float = 25.0  # Derived: 1000ms / 40Hz
     
     # Data Configuration
-    data_dir: str = "data"
+    data_dir: str = "data/raw"
     dataset_name: str = "mc_maze"
     
     # Performance

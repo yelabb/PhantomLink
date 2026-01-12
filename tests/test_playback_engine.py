@@ -7,8 +7,8 @@ import pytest
 import asyncio
 import time
 from pathlib import Path
-from playback_engine import PlaybackEngine
-from models import StreamPacket
+from phantomlink.playback_engine import PlaybackEngine
+from phantomlink.models import StreamPacket
 
 
 DATA_PATH = Path(__file__).parent / "data" / "mc_maze.nwb"

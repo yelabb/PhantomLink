@@ -7,7 +7,7 @@ import pytest
 import asyncio
 import time
 from pathlib import Path
-from session_manager import SessionManager
+from phantomlink.session_manager import SessionManager
 
 
 DATA_PATH = Path(__file__).parent / "data" / "mc_maze.nwb"

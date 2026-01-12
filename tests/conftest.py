@@ -23,7 +23,7 @@ def pytest_configure(config):
 @pytest.fixture(scope="session")
 def data_path():
     """Path to test data file."""
-    return Path(__file__).parent / "data" / "mc_maze.nwb"
+    return Path(__file__).parent.parent / "data" / "raw" / "mc_maze.nwb"
 
 
 @pytest.fixture(scope="session")

@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Optional, AsyncGenerator
 import numpy as np
 
-from config import settings
-from models import StreamPacket, SpikeData, Kinematics, TargetIntention, StreamMetadata
-from data_loader import MC_MazeLoader
+from phantomlink.config import settings
+from phantomlink.models import StreamPacket, SpikeData, Kinematics, TargetIntention, StreamMetadata
+from phantomlink.data_loader import MC_MazeLoader
 
 logger = logging.getLogger(__name__)
 

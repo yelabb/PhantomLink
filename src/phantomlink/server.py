@@ -13,10 +13,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from config import settings
-from models import StreamMetadata
-from playback_engine import PlaybackEngine
-from session_manager import SessionManager
+from phantomlink.config import settings
+from phantomlink.models import StreamMetadata
+from phantomlink.playback_engine import PlaybackEngine
+from phantomlink.session_manager import SessionManager
 
 # Configure logging
 logging.basicConfig(

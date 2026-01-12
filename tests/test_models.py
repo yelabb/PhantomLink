@@ -5,7 +5,7 @@ Tests Pydantic model validation, serialization, and field constraints.
 """
 import pytest
 from pydantic import ValidationError
-from models import SpikeData, Kinematics, TargetIntention, StreamPacket
+from phantomlink.models import SpikeData, Kinematics, TargetIntention, StreamPacket
 
 
 class TestSpikeData:

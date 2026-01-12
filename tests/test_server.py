@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 # Import after ensuring test data exists
-DATA_PATH = Path(__file__).parent / "data" / "mc_maze.nwb"
+DATA_PATH = Path(__file__).parent.parent / "data" / "raw" / "mc_maze.nwb"
 
 
 @pytest.fixture
@@ -21,7 +21,7 @@ def client():
         pytest.skip(f"Test data not found at {DATA_PATH}")
     
     # Import here to avoid issues if data doesn't exist
-    from server import app
+    from phantomlink.server import app
     return TestClient(app)
 
 

@@ -7,8 +7,8 @@ echo ====================================
 echo.
 
 REM Activate virtual environment
-if exist .venv\Scripts\activate.bat (
-    call .venv\Scripts\activate.bat
+if exist ..\\.venv\Scripts\activate.bat (
+    call ..\\.venv\Scripts\activate.bat
     echo Virtual environment activated
 ) else (
     echo WARNING: Virtual environment not found
@@ -16,6 +16,8 @@ if exist .venv\Scripts\activate.bat (
     pause
     exit /b 1
 )
+
+cd ..
 
 REM Check if pytest is installed
 python -c "import pytest" 2>nul

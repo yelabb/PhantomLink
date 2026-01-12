@@ -7,7 +7,7 @@ and trial querying.
 import pytest
 import numpy as np
 from pathlib import Path
-from data_loader import MC_MazeLoader
+from phantomlink.data_loader import MC_MazeLoader
 
 
 # Path to test data

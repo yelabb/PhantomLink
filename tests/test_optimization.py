@@ -1,7 +1,7 @@
 """Quick test to verify vectorization optimization."""
 import numpy as np
 from pathlib import Path
-from data_loader import MC_MazeLoader
+from phantomlink.data_loader import MC_MazeLoader
 
 DATA_PATH = Path(__file__).parent / "data" / "mc_maze.nwb"
 

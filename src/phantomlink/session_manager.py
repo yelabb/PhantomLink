@@ -11,8 +11,8 @@ from typing import Dict, Optional, List
 from pathlib import Path
 from collections import OrderedDict
 
-from playback_engine import PlaybackEngine
-from data_loader import MC_MazeLoader
+from phantomlink.playback_engine import PlaybackEngine
+from phantomlink.data_loader import MC_MazeLoader
 
 logger = logging.getLogger(__name__)
 
