@@ -6,9 +6,11 @@ The MC_Maze dataset contains neural recordings from motor cortex during a maze t
 
 📖 Documentation: See README.md for architecture details and usage
 """
+import asyncio
 import logging
 from pathlib import Path
 from typing import Optional, Dict, List
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from pynwb import NWBHDF5IO
 
@@ -47,6 +49,9 @@ class MC_MazeLoader:
         self._hand_vel = None
         self._trials = None
         self._trial_index = []  # List of (start_time, stop_time, trial_data)
+        
+        # ThreadPool executor for async operations
+        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="data_loader")
         
         self._open_dataset()
     
@@ -156,6 +161,28 @@ class MC_MazeLoader:
         
         return spike_counts
     
+    async def get_binned_spikes_async(self, start_time: float, end_time: float, 
+                                     bin_size_ms: float = 25.0) -> np.ndarray:
+        """
+        Asynchronous version of get_binned_spikes using threadpool executor.
+        
+        Args:
+            start_time: Start time in seconds
+            end_time: End time in seconds
+            bin_size_ms: Bin size in milliseconds
+        
+        Returns:
+            Array of shape (num_bins, num_channels) with spike counts
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self._executor, 
+            self.get_binned_spikes, 
+            start_time, 
+            end_time, 
+            bin_size_ms
+        )
+    
     def get_kinematics(self, start_time: float, end_time: float, 
                        bin_size_ms: float = 25.0) -> Dict[str, np.ndarray]:
         """
@@ -202,6 +229,28 @@ class MC_MazeLoader:
             'x': x,
             'y': y
         }
+    
+    async def get_kinematics_async(self, start_time: float, end_time: float, 
+                                  bin_size_ms: float = 25.0) -> Dict[str, np.ndarray]:
+        """
+        Asynchronous version of get_kinematics using threadpool executor.
+        
+        Args:
+            start_time: Start time in seconds
+            end_time: End time in seconds
+            bin_size_ms: Bin size in milliseconds
+        
+        Returns:
+            Dictionary with 'vx', 'vy', 'x', 'y' arrays
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self._executor, 
+            self.get_kinematics, 
+            start_time, 
+            end_time, 
+            bin_size_ms
+        )
     
     def get_targets(self, start_time: float, end_time: float,
                    bin_size_ms: float = 25.0) -> Dict[str, np.ndarray]:
@@ -301,6 +350,9 @@ class MC_MazeLoader:
     
     def close(self):
         """Close file handles and release resources."""
+        if self._executor:
+            self._executor.shutdown(wait=True)
+            logger.info("Shutdown threadpool executor")
         if self._io:
             self._io.close()
             logger.info("Closed NWB file")

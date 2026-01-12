@@ -182,14 +182,14 @@ class PlaybackEngine:
         start_time = self._current_index * bin_size_s
         end_time = start_time + bin_size_s
         
-        # Get neural data
-        spike_counts_array = self.loader.get_binned_spikes(
-            start_time, end_time, bin_size_ms=settings.packet_interval_ms
-        )
-        
-        # Get kinematics data
-        kinematics_data = self.loader.get_kinematics(
-            start_time, end_time, bin_size_ms=settings.packet_interval_ms
+        # Get neural data and kinematics data asynchronously (in parallel)
+        spike_counts_array, kinematics_data = await asyncio.gather(
+            self.loader.get_binned_spikes_async(
+                start_time, end_time, bin_size_ms=settings.packet_interval_ms
+            ),
+            self.loader.get_kinematics_async(
+                start_time, end_time, bin_size_ms=settings.packet_interval_ms
+            )
         )
         
         # Get target data
@@ -236,6 +236,20 @@ class PlaybackEngine:
         self._current_index += 1
         return packet
     
+    async def start(self):
+        """Start the playback engine."""
+        if not self.loader:
+            await self.initialize()
+        self.is_running = True
+        logger.info("Playback engine started")
+    
+    def reset(self):
+        """Reset playback to beginning."""
+        self._current_index = 0
+        self._sequence_number = 0
+        self._start_time = None
+        logger.info("Playback reset to start")
+    
     def pause(self):
         """Pause the playback."""
         self.is_paused = True
@@ -250,6 +264,7 @@ class PlaybackEngine:
         """Stop the playback."""
         self.is_running = False
         logger.info("Playback stopped")
+        return None  # Make it synchronous for tests
     
     def seek(self, position_seconds: float):
         """
