@@ -119,11 +119,11 @@ pip install -r requirements.txt
 ```bash
 pip install dandi
 dandi download https://dandiarchive.org/dandiset/000140/draft
-mkdir data
-mv 000140/sub-Jenkins/* data/mc_maze.nwb
+mkdir -p data/raw
+mv 000140/sub-Jenkins/* data/raw/mc_maze.nwb
 ```
 
-Expected: `data/mc_maze.nwb` (~1.5GB)
+Expected: `data/raw/mc_maze.nwb` (~1.5GB)
 
 ### Start Server
 
@@ -611,8 +611,17 @@ PhantomLink/
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-pip install pytest pytest-asyncio  # dev dependencies
+pip install pytest pytest-asyncio pytest-cov  # dev dependencies
 ```
+
+### Code Guidelines
+
+- Type hints on all functions
+- Async/await for all I/O operations
+- Use `logger.info/warning/error` for diagnostics
+- Fail fast, propagate errors clearly
+- No mock data - single source of truth from NWB files
+- Docstrings for public functions
 
 ### Testing
 
@@ -631,7 +640,7 @@ python main.py
 
 **Dataset not found:**
 ```bash
-dir data\mc_maze.nwb  # Verify file exists
+dir data\raw\mc_maze.nwb  # Verify file exists
 ```
 
 **Low stream rate:**
@@ -646,8 +655,11 @@ curl -X POST http://localhost:8000/api/sessions/cleanup
 
 ## Resources
 
-- [Neural Latents Benchmark](https://neurallatents.github.io/)
-- [DANDI Archive #000140](https://dandiarchive.org/dandiset/000140)
+- [Beginner's Guide to BCIs](docs/BEGINNERS_GUIDE.md) - Educational introduction
+- [Noise Injection Guide](docs/NOISE_INJECTION_GUIDE.md) - Robustness testing
+- [Data Analysis Notebook](notebooks/data_analysis.ipynb) - Dataset exploration
+- [Neural Latents Benchmark](https://neurallatents.github.io/) - MC_Maze dataset source
+- [DANDI Archive #000140](https://dandiarchive.org/dandiset/000140) - Dataset download
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 
 ## License
@@ -658,3 +670,4 @@ Research use only. MC_Maze dataset from Neural Latents Benchmark.
 
 - GitHub: [@yelabb](https://github.com/yelabb)
 - Project: [PhantomLink](https://github.com/yelabb/PhantomLink)
+- Issues: [Report a bug](https://github.com/yelabb/PhantomLink/issues)
