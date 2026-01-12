@@ -5,7 +5,7 @@ This module implements the REST and WebSocket API for PhantomLink Core.
 """
 import logging
 from pathlib import Path
-from typing import Set, Optional
+from typing import Set, Optional, Literal
 import asyncio
 import time
 
@@ -349,25 +349,26 @@ async def seek_playback(session_code: str, position_seconds: float):
     return {"status": "seeked", "position_seconds": position_seconds, "session_code": session_code}
 
 
-@app.websocket("/stream/{session_code}")
-async def websocket_stream(websocket: WebSocket, session_code: str, 
-                          trial_id: Optional[int] = None, target_id: Optional[int] = None):
+async def _handle_stream(
+    websocket: WebSocket,
+    session_code: str,
+    format: Literal['json', 'binary'],
+    trial_id: Optional[int] = None,
+    target_id: Optional[int] = None
+) -> None:
     """
-    WebSocket endpoint for 40Hz neural data streaming with session isolation (JSON format).
+    Generic handler for WebSocket streaming with session isolation.
     
-    Path parameters:
+    Args:
+        websocket: WebSocket connection
         session_code: Session identifier (e.g., 'swift-neural-42')
+        format: Output format ('json' or 'binary')
+        trial_id: Optional filter to only stream packets from this trial
+        target_id: Optional filter to only stream packets reaching for this target index
     
-    Query parameters:
-        trial_id: Filter to only stream packets from this trial
-        target_id: Filter to only stream packets reaching for this target index
-    
-    Clients connect to ws://localhost:8000/stream/{session_code} to receive real-time
-    packets containing time-aligned spike counts and behavioral ground truth in JSON format.
-    
-    Each session has independent playback state (position, pause, filters).
-    
-    For better performance, use the binary endpoint: /stream/binary/{session_code}
+    Performance comparison (format parameter):
+        - 'json': Human-readable, easier debugging, ~15KB packets
+        - 'binary': MessagePack format, 60% smaller (~6KB), 3-5x faster serialization
     """
     if not session_manager:
         await websocket.close(code=1011, reason="Session manager not initialized")
@@ -397,20 +398,27 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
                 logger.info(f"LSL streaming enabled for session {session_code}")
     
     client_id = id(websocket)
-    logger.info(f"Client {client_id} connected to session {session_code}. Active connections: {len(active_connections)}")
+    format_desc = "binary" if format == "binary" else "JSON"
+    logger.info(f"Client {client_id} connected to {format_desc} stream session {session_code}. Active connections: {len(active_connections)}")
     
     try:
-        # Send initial metadata as JSON
+        # Send initial metadata
         metadata = playback_engine.get_metadata()
+        endpoint = f"/stream/binary/{session_code}" if format == "binary" else f"/stream/{session_code}"
         metadata_msg = {
             "type": "metadata",
             "data": metadata.model_dump(),
             "session": {
                 "code": session_code,
-                "url": f"ws://localhost:{settings.port}/stream/{session_code}"
+                "url": f"ws://localhost:{settings.port}{endpoint}"
             }
         }
-        await websocket.send_json(metadata_msg)
+        
+        if format == "binary":
+            binary_metadata = serialize_for_websocket("metadata", metadata_msg["data"])
+            await websocket.send_bytes(binary_metadata)
+        else:
+            await websocket.send_json(metadata_msg)
         
         # Start streaming packets with optional filters
         async for packet in playback_engine.stream(loop=True, trial_filter=trial_id, target_filter=target_id):
@@ -422,12 +430,16 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
                 if lsl_streamer:
                     await lsl_streamer.push_packet_async(packet)
                 
-                # Send packet as JSON
-                packet_msg = {
-                    "type": "data",
-                    "data": packet.model_dump()
-                }
-                await websocket.send_json(packet_msg)
+                # Send packet in requested format
+                if format == "binary":
+                    binary_packet = serialize_for_websocket("data", packet)
+                    await websocket.send_bytes(binary_packet)
+                else:
+                    packet_msg = {
+                        "type": "data",
+                        "data": packet.model_dump()
+                    }
+                    await websocket.send_json(packet_msg)
                 
                 # Calculer et enregistrer la latence réseau
                 network_send_time = time.time()
@@ -447,20 +459,43 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
                     pass  # No message received, continue streaming
                 
             except WebSocketDisconnect:
-                logger.info(f"Client {client_id} disconnected during streaming")
+                logger.info(f"Client {client_id} disconnected during {format_desc} streaming")
                 break
             except Exception as e:
-                logger.error(f"Error sending packet to client {client_id}: {e}")
+                logger.error(f"Error sending {format_desc} packet to client {client_id}: {e}")
                 break
     
     except WebSocketDisconnect:
-        logger.info(f"Client {client_id} disconnected from session {session_code}")
+        logger.info(f"Client {client_id} disconnected from {format_desc} stream session {session_code}")
     except Exception as e:
-        logger.error(f"Error in WebSocket connection {client_id} (session {session_code}): {e}")
+        logger.error(f"Error in {format_desc} WebSocket connection {client_id} (session {session_code}): {e}")
     finally:
         active_connections.discard(websocket)
         session_manager.decrement_connections(session_code)
-        logger.info(f"Client {client_id} removed from session {session_code}. Active connections: {len(active_connections)}")
+        logger.info(f"Client {client_id} removed from {format_desc} stream session {session_code}. Active connections: {len(active_connections)}")
+
+
+@app.websocket("/stream/{session_code}")
+async def websocket_stream(websocket: WebSocket, session_code: str, 
+                          trial_id: Optional[int] = None, target_id: Optional[int] = None):
+    """
+    WebSocket endpoint for 40Hz neural data streaming with session isolation (JSON format).
+    
+    Path parameters:
+        session_code: Session identifier (e.g., 'swift-neural-42')
+    
+    Query parameters:
+        trial_id: Filter to only stream packets from this trial
+        target_id: Filter to only stream packets reaching for this target index
+    
+    Clients connect to ws://localhost:8000/stream/{session_code} to receive real-time
+    packets containing time-aligned spike counts and behavioral ground truth in JSON format.
+    
+    Each session has independent playback state (position, pause, filters).
+    
+    For better performance, use the binary endpoint: /stream/binary/{session_code}
+    """
+    await _handle_stream(websocket, session_code, format='json', trial_id=trial_id, target_id=target_id)
 
 
 @app.websocket("/stream/binary/{session_code}")
@@ -486,96 +521,7 @@ async def websocket_stream_binary(websocket: WebSocket, session_code: str,
     
     Each session has independent playback state (position, pause, filters).
     """
-    if not session_manager:
-        await websocket.close(code=1011, reason="Session manager not initialized")
-        return
-    
-    # Get or create session
-    playback_engine = session_manager.get_session(session_code)
-    if not playback_engine:
-        # Auto-create session if it doesn't exist
-        logger.info(f"Auto-creating session: {session_code}")
-        session_manager.create_session(session_code)
-        playback_engine = session_manager.get_session(session_code)
-    
-    await websocket.accept()
-    active_connections.add(websocket)
-    session_manager.increment_connections(session_code)
-    
-    # Initialize LSL streamer for this session if enabled
-    lsl_streamer = None
-    if lsl_manager and settings.lsl_enabled:
-        lsl_streamer = lsl_manager.get_streamer(session_code)
-        if not lsl_streamer:
-            # Create LSL streamer for this session
-            metadata = playback_engine.get_metadata()
-            lsl_streamer = lsl_manager.create_streamer(session_code, metadata.num_channels)
-            if lsl_streamer:
-                logger.info(f"LSL streaming enabled for session {session_code}")
-    
-    client_id = id(websocket)
-    logger.info(f"Client {client_id} connected to binary stream session {session_code}. Active connections: {len(active_connections)}")
-    
-    try:
-        # Send initial metadata (MessagePack binary format for 60% size reduction)
-        metadata = playback_engine.get_metadata()
-        metadata_msg = {
-            "type": "metadata",
-            "data": metadata.model_dump(),
-            "session": {
-                "code": session_code,
-                "url": f"ws://localhost:{settings.port}/stream/binary/{session_code}"
-            }
-        }
-        binary_metadata = serialize_for_websocket("metadata", metadata_msg["data"])
-        await websocket.send_bytes(binary_metadata)
-        
-        # Start streaming packets with optional filters
-        async for packet in playback_engine.stream(loop=True, trial_filter=trial_id, target_filter=target_id):
-            try:
-                # Mesurer la latence tick-to-network
-                tick_generation_time = packet.timestamp
-                
-                # Send packet via LSL if enabled
-                if lsl_streamer:
-                    await lsl_streamer.push_packet_async(packet)
-                
-                # Send packet as MessagePack binary (60% smaller, 3-5x faster than JSON)
-                binary_packet = serialize_for_websocket("data", packet)
-                await websocket.send_bytes(binary_packet)
-                
-                # Calculer et enregistrer la latence réseau
-                network_send_time = time.time()
-                network_latency = network_send_time - tick_generation_time
-                playback_engine._network_latencies.append(network_latency)
-                
-                # Check if client sent any control messages
-                # (non-blocking receive with timeout)
-                try:
-                    message = await asyncio.wait_for(
-                        websocket.receive_text(),
-                        timeout=0.001
-                    )
-                    # Handle control messages if needed
-                    logger.debug(f"Received message from client: {message}")
-                except asyncio.TimeoutError:
-                    pass  # No message received, continue streaming
-                
-            except WebSocketDisconnect:
-                logger.info(f"Client {client_id} disconnected during binary streaming")
-                break
-            except Exception as e:
-                logger.error(f"Error sending binary packet to client {client_id}: {e}")
-                break
-    
-    except WebSocketDisconnect:
-        logger.info(f"Client {client_id} disconnected from binary stream session {session_code}")
-    except Exception as e:
-        logger.error(f"Error in binary WebSocket connection {client_id} (session {session_code}): {e}")
-    finally:
-        active_connections.discard(websocket)
-        session_manager.decrement_connections(session_code)
-        logger.info(f"Client {client_id} removed from binary stream session {session_code}. Active connections: {len(active_connections)}")
+    await _handle_stream(websocket, session_code, format='binary', trial_id=trial_id, target_id=target_id)
 
 
 @app.get("/metrics")
