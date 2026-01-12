@@ -8,7 +8,7 @@ The MC_Maze dataset contains neural recordings from motor cortex during a maze t
 """
 import logging
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import numpy as np
 from pynwb import NWBHDF5IO
 
@@ -45,6 +45,8 @@ class MC_MazeLoader:
         self._units = None
         self._cursor_pos = None
         self._hand_vel = None
+        self._trials = None
+        self._trial_index = []  # List of (start_time, stop_time, trial_data)
         
         self._open_dataset()
     
@@ -100,6 +102,9 @@ class MC_MazeLoader:
             self._hand_vel = behavior.data_interfaces['hand_vel']
             vel_data = self._hand_vel.data[:]
             logger.info(f"  - hand_vel: {vel_data.shape}")
+        
+        # Parse trial structure
+        self._parse_trials()
     
     def get_binned_spikes(self, start_time: float, end_time: float, 
                          bin_size_ms: float = 25.0) -> np.ndarray:
@@ -223,6 +228,57 @@ class MC_MazeLoader:
             'target_x': np.zeros(num_samples),
             'target_y': np.zeros(num_samples)
         }
+    
+    def _parse_trials(self):
+        """Parse trial data and build trial index."""
+        if not hasattr(self._nwb, 'trials') or self._nwb.trials is None:
+            logger.warning("No trial data found in NWB file")
+            return
+        
+        self._trials = self._nwb.trials
+        num_trials = len(self._trials)
+        logger.info(f"Found {num_trials} trials")
+        
+        # Build trial index with intention data
+        for i in range(num_trials):
+            trial_info = {
+                'trial_id': i,
+                'start_time': float(self._trials['start_time'][i]),
+                'stop_time': float(self._trials['stop_time'][i]),
+                'success': bool(self._trials['success'][i]),
+                'num_targets': int(self._trials['num_targets'][i]),
+                'active_target': int(self._trials['active_target'][i]),
+                'target_pos': self._trials['target_pos'][i].tolist(),
+                'move_onset_time': float(self._trials['move_onset_time'][i]) if 'move_onset_time' in self._trials.colnames else None,
+                'go_cue_time': float(self._trials['go_cue_time'][i]) if 'go_cue_time' in self._trials.colnames else None,
+            }
+            self._trial_index.append(trial_info)
+    
+    def get_trials(self) -> List[Dict]:
+        """Get list of all trials with intention metadata."""
+        return self._trial_index
+    
+    def get_trial_by_time(self, time: float) -> Optional[Dict]:
+        """Get trial information for a given time point."""
+        for trial in self._trial_index:
+            if trial['start_time'] <= time < trial['stop_time']:
+                return trial
+        return None
+    
+    def get_trials_by_target(self, target_index: int) -> List[Dict]:
+        """Get all trials reaching for a specific target index."""
+        return [t for t in self._trial_index if t['active_target'] == target_index]
+    
+    def get_target_position(self, trial_info: Dict) -> Optional[tuple]:
+        """Get the active target position for a trial."""
+        if trial_info is None:
+            return None
+        active_idx = trial_info['active_target']
+        target_pos = trial_info['target_pos']
+        if active_idx < len(target_pos):
+            pos = target_pos[active_idx]
+            return (float(pos[0]), float(pos[1]))
+        return None
     
     @property
     def num_channels(self) -> int:

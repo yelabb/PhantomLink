@@ -11,14 +11,17 @@ PhantomLink Core streams pre-recorded neural data from the MC_Maze dataset at 40
 - **Single-Stack Python**: FastAPI + Uvicorn ASGI server
 - **Native NWB/HDF5**: Direct pynwb integration with lazy memory-mapped access
 - **Strict 40Hz Streaming**: Asyncio-based playback maintains precise 25ms intervals
-- **Real Neural Data**: MC_Maze dataset from Neural Latents Benchmark (142 units, 7192s duration, 1000Hz behavioral sampling)
+- **Real Neural Data**: MC_Maze dataset from Neural Latents Benchmark (142 units, 294s duration, 100 trials)
+- **Calibration-Ready**: Intent-based filtering for decoder validation workflows
 
 ## Features
 
 ✅ **40Hz Real-Time Streaming** - WebSocket endpoint with sub-millisecond timing accuracy  
+✅ **Intent-Based Calibration API** - Query trials by target, filter streams by intention  
 ✅ **Lazy Loading** - Memory-mapped HDF5 access, no RAM bottleneck  
 ✅ **Time-Aligned Payloads** - Spike counts + cursor kinematics synchronized to 25ms bins  
-✅ **REST API** - Control endpoints for pause/resume/seek  
+✅ **Real Trial Data** - 100 trials with target positions and timing markers  
+✅ **REST API** - Control endpoints for pause/resume/seek + trial queries  
 ✅ **Validation Client** - Built-in stream integrity testing
 
 ## Quick Start
@@ -78,7 +81,8 @@ INFO - Found 142 neural units
 INFO - Found processing module: behavior
 INFO -   - cursor_pos: (287710, 2), sampling rate: 1000.0Hz
 INFO -   - hand_vel: (287710, 2)
-INFO - Dataset loaded: 142 channels, 7192.8s duration, 287710 timesteps
+INFO - Found 100 trials
+INFO - Dataset loaded: 142 channels, 293.7s duration, 11746 timesteps
 INFO - Server ready on 0.0.0.0:8000
 INFO - Uvicorn running on http://0.0.0.0:8000
 ```
@@ -128,6 +132,42 @@ python test_client.py sample
 
 Displays metadata + 3 example packets with full data structure.
 
+### Test Calibration API
+
+Test intent-based filtering for decoder calibration:
+
+```bash
+# Test trial/intention REST API
+python test_calibration.py
+
+# Stream only packets reaching for target 0
+python test_calibration.py target 0
+
+# Stream only packets from trial 5
+python test_calibration.py trial 5
+```
+
+Expected output:
+```
+=== Testing Trial/Intention API ===
+1. Fetching all trials...
+   Found 100 trials
+   Sample trial: {...}
+
+3. Fetching all trials reaching for target 0...
+   Found 77 trials reaching for target 0
+
+=== Testing Filtered Stream (target_id=0) ===
+Connected! Receiving filtered stream...
+  200 packets | trial_id=1 | target=(-77, 82)
+
+=== Results ===
+Packets received: 201
+Unique target positions: 2
+  Target 0: (-118, -83)
+  Target 1: (-77, 82)
+```
+
 ## API Reference
 
 ### REST Endpoints
@@ -138,6 +178,9 @@ Displays metadata + 3 example packets with full data structure.
 | `/health` | GET | Health check |
 | `/api/metadata` | GET | Dataset metadata (channels, duration, etc.) |
 | `/api/stats` | GET | Current playback statistics |
+| `/api/trials` | GET | List all trials with target/intention data |
+| `/api/trials/{trial_id}` | GET | Get specific trial information |
+| `/api/trials/by-target/{target_index}` | GET | Get all trials reaching for a specific target |
 | `/api/control/pause` | POST | Pause playback |
 | `/api/control/resume` | POST | Resume playback |
 | `/api/control/stop` | POST | Stop playback |
@@ -148,6 +191,22 @@ Displays metadata + 3 example packets with full data structure.
 **Endpoint**: `ws://localhost:8000/stream`  
 **Frequency**: 40Hz (25ms intervals)  
 **Protocol**: JSON packets
+
+**Query Parameters** (optional):
+- `trial_id` - Filter to only stream packets from a specific trial (0-99)
+- `target_id` - Filter to only stream packets reaching for a specific target (0-2)
+
+**Examples**:
+```bash
+# All packets
+ws://localhost:8000/stream
+
+# Only trial 5
+ws://localhost:8000/stream?trial_id=5
+
+# Only reaching for target 0 (77 trials)
+ws://localhost:8000/stream?target_id=0
+```
 
 ## Data Format
 
@@ -173,12 +232,12 @@ Each 40Hz packet contains time-aligned data at 25ms resolution:
       "y": -5.33       // Cursor position Y (mm)
     },
     "intention": {
-      "target_id": 0,
-      "target_x": 0.0,
-      "target_y": 0.0
+      "target_id": 0,           // Active target index (0-2, from trial data)
+      "target_x": -118.0,      // Actual target X position (mm, from trial)
+      "target_y": -83.0        // Actual target Y position (mm, from trial)
     },
-    "trial_id": 0,
-    "trial_time_ms": 1050.0
+    "trial_id": 0,             // Trial identifier (0-99)
+    "trial_time_ms": 1050.0    // Time within trial
   }
 }
 ```
@@ -188,7 +247,9 @@ Each 40Hz packet contains time-aligned data at 25ms resolution:
 - **Spikes**: 142 neural units from motor cortex, binned at 25ms
 - **Kinematics**: Cursor position and hand velocity, sampled at 1000Hz (downsampled to 40Hz)
 - **Behavioral Data**: From NWB `processing['behavior']` module
-- **Ground Truth**: Real neural recordings, not simulated
+- **Trial Data**: 100 trials from NWB `trials` table with timing markers and target positions
+- **Intention Ground Truth**: Real target coordinates from maze task (1-3 targets per trial)
+- **Neural Recordings**: Real data from monkey Jenkins (2009), not simulated
 
 ## Architecture Deep Dive
 
@@ -207,16 +268,19 @@ Client (WebSocket) ←→ FastAPI Server ←→ PlaybackEngine ←→ DataLoader
 - Lazy-loads NWB file with pynwb + HDF5 memory mapping
 - Extracts spike times (ragged arrays via VectorIndex)
 - Reads behavioral data at 1000Hz, bins to 40Hz windows
+- Parses trial table with target positions and timing markers
+- Provides trial query methods: `get_trials()`, `get_trials_by_target()`, `get_trial_by_time()`
 - No data preloading: ~7ms per packet extraction
 
 **`playback_engine.py`** - PlaybackEngine class  
 - Asyncio-based 40Hz streaming with strict timing
+- Supports optional filtering by `trial_id` or `target_id`
 - Tracks timing errors (logs every 1000 packets)
 - Handles pause/resume/seek controls
-- Generates StreamPacket objects
+- Generates StreamPacket objects with real trial context
 
-**`server.py`** - FastAPI application  
-- WebSocket endpoint at `/stream` 
+**`server.py`** - FastAPI applicatwith optional `trial_id`/`target_id` filters
+- REST API for control, metadata, and trial queries
 - REST API for control and metadata
 - Detects `.nwb` files in `data/` directory
 - Non-blocking async design
@@ -251,11 +315,13 @@ PhantomLink/
 │   └── mc_maze.nwb         # MC_Maze dataset (~1.5GB)
 ├── config.py               # Settings (40Hz, 25ms intervals)
 ├── models.py               # Pydantic data models
-├── data_loader.py          # NWB file loader with lazy access
-├── playback_engine.py      # 40Hz streaming engine
-├── server.py               # FastAPI application
+├── data_loader.py          # NWB file loader with trial parsing
+├── playback_engine.py      # 40Hz streaming engine with filtering
+├── server.py               # FastAPI application with calibration API
 ├── main.py                 # Entry point
 ├── test_client.py          # Stream validation client
+├── test_calibration.py     # Intent-based filtering tests
+├── investigate_nwb.py      # NWB structure exploration tool
 ├── requirements.txt        # Python dependencies
 └── README.md              # This file (single source of truth)
 ```
@@ -331,6 +397,60 @@ kinematics=Kinematics(
 - **Logging**: Use `logger.info/warning/error` for diagnostics
 - **Error handling**: Fail fast, propagate errors clearly
 - **Async/await**: All I/O operations are async
+
+## Use Cases
+
+### 1. Decoder Development
+Stream neural data with known intentions to train and validate BCI decoders:
+
+```python
+import websockets
+import json
+
+# Connect and filter for specific target
+async with websockets.connect('ws://localhost:8000/stream?target_id=0') as ws:
+    async for message in ws:
+        packet = json.loads(message)['data']
+        spikes = packet['spikes']['spike_counts']
+        target = (packet['intention']['target_x'], packet['intention']['target_y'])
+        # Train decoder: spikes -> target
+```
+
+### 2. Calibration Workflows
+Query trials to build calibration sets:
+
+```python
+import requests
+
+# Get all trials reaching for target 0
+response = requests.get('http://localhost:8000/api/trials/by-target/0')
+trials = response.json()['trials']  # 77 trials
+
+# Stream data from each calibration trial
+for trial in trials[:10]:  # First 10 trials
+    trial_id = trial['trial_id']
+    # Connect to ws://localhost:8000/stream?trial_id={trial_id}
+```
+
+### 3. Ground Truth Valida12, 2026  
+**Status**: ✅ MVP Complete - 40Hz streaming validated with intent-based calibration API
+
+```python
+# Stream with known targets
+async with websockets.connect('ws://localhost:8000/stream') as ws:
+    async for message in ws:
+        packet = json.loads(message)['data']
+        
+        # Your decoder prediction
+        predicted_target = my_decoder.predict(packet['spikes'])
+        
+        # Ground truth
+        actual_target = (packet['intention']['target_x'], 
+                        packet['intention']['target_y'])
+        
+        # Calculate error
+        error = distance(predicted_target, actual_target)
+```
 
 ## Next Steps
 

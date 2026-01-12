@@ -5,7 +5,7 @@ This module implements the REST and WebSocket API for PhantomLink Core.
 """
 import logging
 from pathlib import Path
-from typing import Set
+from typing import Set, Optional
 import asyncio
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
@@ -115,6 +115,39 @@ async def get_metadata():
     return metadata
 
 
+@app.get("/api/trials")
+async def get_trials():
+    """Get list of all trials with intention/target information."""
+    if not playback_engine or not playback_engine.loader:
+        raise HTTPException(status_code=503, detail="Playback engine not initialized")
+    
+    trials = playback_engine.loader.get_trials()
+    return {"trials": trials, "count": len(trials)}
+
+
+@app.get("/api/trials/{trial_id}")
+async def get_trial(trial_id: int):
+    """Get specific trial information."""
+    if not playback_engine or not playback_engine.loader:
+        raise HTTPException(status_code=503, detail="Playback engine not initialized")
+    
+    trials = playback_engine.loader.get_trials()
+    if trial_id < 0 or trial_id >= len(trials):
+        raise HTTPException(status_code=404, detail=f"Trial {trial_id} not found")
+    
+    return trials[trial_id]
+
+
+@app.get("/api/trials/by-target/{target_index}")
+async def get_trials_by_target(target_index: int):
+    """Get all trials reaching for a specific target index."""
+    if not playback_engine or not playback_engine.loader:
+        raise HTTPException(status_code=503, detail="Playback engine not initialized")
+    
+    trials = playback_engine.loader.get_trials_by_target(target_index)
+    return {"trials": trials, "count": len(trials), "target_index": target_index}
+
+
 @app.get("/api/stats")
 async def get_stats():
     """Get current playback statistics."""
@@ -169,9 +202,13 @@ async def seek_playback(position_seconds: float):
 
 
 @app.websocket("/stream")
-async def websocket_stream(websocket: WebSocket):
+async def websocket_stream(websocket: WebSocket, trial_id: Optional[int] = None, target_id: Optional[int] = None):
     """
     WebSocket endpoint for 40Hz neural data streaming.
+    
+    Query parameters:
+        trial_id: Filter to only stream packets from this trial
+        target_id: Filter to only stream packets reaching for this target index
     
     Clients connect to ws://localhost:8000/stream to receive real-time
     packets containing time-aligned spike counts and behavioral ground truth.
@@ -190,8 +227,8 @@ async def websocket_stream(websocket: WebSocket):
             "data": metadata.model_dump()
         })
         
-        # Start streaming packets
-        async for packet in playback_engine.stream(loop=True):
+        # Start streaming packets with optional filters
+        async for packet in playback_engine.stream(loop=True, trial_filter=trial_id, target_filter=target_id):
             try:
                 # Send packet as JSON
                 await websocket.send_json({

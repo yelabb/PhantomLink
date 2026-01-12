@@ -75,12 +75,15 @@ class PlaybackEngine:
             duration_seconds=self.loader.duration
         )
     
-    async def stream(self, loop: bool = True) -> AsyncGenerator[StreamPacket, None]:
+    async def stream(self, loop: bool = True, trial_filter: Optional[int] = None, 
+                    target_filter: Optional[int] = None) -> AsyncGenerator[StreamPacket, None]:
         """
         Stream packets at 40Hz with strict timing.
         
         Args:
             loop: Whether to loop the dataset when it ends
+            trial_filter: If set, only stream packets from this trial_id
+            target_filter: If set, only stream packets reaching for this target index
         
         Yields:
             StreamPacket objects at 25ms intervals
@@ -118,6 +121,15 @@ class PlaybackEngine:
                 else:
                     logger.info("Reached end of dataset, stopping stream")
                     break
+            
+            # Apply filters if specified
+            if trial_filter is not None and packet.trial_id != trial_filter:
+                self._current_index += 1
+                continue
+            
+            if target_filter is not None and packet.intention.target_id != target_filter:
+                self._current_index += 1
+                continue
             
             yield packet
             
@@ -184,6 +196,15 @@ class PlaybackEngine:
             start_time, end_time, bin_size_ms=settings.packet_interval_ms
         )
         
+        # Get trial context for this time point
+        trial_info = self.loader.get_trial_by_time(start_time)
+        trial_id = trial_info['trial_id'] if trial_info else None
+        
+        # Get actual target position if in trial
+        target_pos = None
+        if trial_info:
+            target_pos = self.loader.get_target_position(trial_info)
+        
         # Extract single time bin (first bin of the returned arrays)
         spike_counts = spike_counts_array[0] if len(spike_counts_array) > 0 else np.zeros(self.loader.num_channels)
         
@@ -203,11 +224,11 @@ class PlaybackEngine:
                 y=float(kinematics_data['y'][0])
             ),
             intention=TargetIntention(
-                target_id=int(target_data['target_id'][0]),
-                target_x=float(target_data['target_x'][0]),
-                target_y=float(target_data['target_y'][0])
+                target_id=trial_info['active_target'] if trial_info else None,
+                target_x=float(target_pos[0]) if target_pos else None,
+                target_y=float(target_pos[1]) if target_pos else None
             ),
-            trial_id=0,  # Could be extracted from dataset
+            trial_id=trial_id,
             trial_time_ms=start_time * 1000.0
         )
         
