@@ -12,10 +12,13 @@
 4. [Understanding Trials](#understanding-trials)
 5. [Understanding Targets](#understanding-targets)
 6. [Understanding Packets](#understanding-packets)
-7. [How It All Fits Together](#how-it-all-fits-together)
-8. [Real-World Applications](#real-world-applications)
-9. [Technical Deep Dive](#technical-deep-dive)
-10. [Learning Resources](#learning-resources)
+7. [Understanding Kinematics](#understanding-kinematics)
+8. [Understanding Neural Manifolds](#understanding-neural-manifolds)
+9. [Closed-Loop BCIs](#closed-loop-bcis)
+10. [How It All Fits Together](#how-it-all-fits-together)
+11. [Real-World Applications](#real-world-applications)
+12. [Technical Deep Dive](#technical-deep-dive)
+13. [Learning Resources](#learning-resources)
 
 ---
 
@@ -415,7 +418,929 @@ Packets:                                                ████████
 
 Each `█` represents one packet (25ms of data).
 
-### Data Flow in PhantomLink
+---
+
+## Understanding Kinematics
+
+### What are Kinematics?
+
+**Kinematics** is the study of **motion** without considering the forces that cause it. In BCI research, kinematics describe how the hand, cursor, or limb is moving.
+
+Think of kinematics as the "GPS data" of movement - it tells you where you are, how fast you're moving, and in what direction.
+
+### The Core Variables
+
+In the MC_Maze dataset, kinematics include **4 key measurements** for each packet:
+
+```python
+{
+  "x": -112.5,     # X position (left-right)
+  "y": -87.3,      # Y position (up-down)
+  "vx": -8.383,    # X velocity (speed left-right)
+  "vy": -4.490     # Y velocity (speed up-down)
+}
+```
+
+### Position (x, y)
+
+**What it is:** The current location of the cursor/hand in 2D space.
+
+**Units:** Typically millimeters or screen coordinates
+
+**Example:**
+```
+      +Y (up)
+       ↑
+       |
+  -X ← • → +X  
+       |
+       ↓
+      -Y (down)
+
+Position (0, 0) = Center
+Position (120, 0) = 120 units to the right
+Position (0, -90) = 90 units down
+```
+
+**Why it matters:**
+- Tells you where the hand/cursor currently is
+- Essential for determining when target is reached
+- Used to calculate movement trajectories
+
+### Velocity (vx, vy)
+
+**What it is:** How fast the cursor/hand is moving in each direction.
+
+**Units:** Units per second (e.g., mm/s)
+
+**Example:**
+```
+vx = 50, vy = 0    → Moving right at 50 units/s
+vx = 0, vy = -30   → Moving down at 30 units/s
+vx = 20, vy = 20   → Moving diagonally (up-right)
+vx = 0, vy = 0     → Not moving (stationary)
+```
+
+**Speed vs. Velocity:**
+- **Velocity** includes direction (vx, vy)
+- **Speed** is just the magnitude: `speed = √(vx² + vy²)`
+
+**Example calculation:**
+```python
+vx = -8.383
+vy = -4.490
+speed = sqrt((-8.383)² + (-4.490)²) = 9.49 units/s
+```
+
+**Why it matters:**
+- Neural activity correlates strongly with movement speed
+- Different neurons fire at different speeds
+- Critical for predicting intended movement
+- Used in velocity-based decoders (predicting speed rather than position)
+
+### Understanding Movement Phases
+
+During a reach trial, kinematics reveal distinct phases:
+
+```
+Phase 1: REST
+├─ Position: (0, 0) - at center
+├─ Velocity: (0, 0) - not moving
+└─ Neural: Low baseline activity
+
+Phase 2: PLANNING  
+├─ Position: (0, 0) - still at center
+├─ Velocity: (0, 0) - not moving yet
+└─ Neural: Activity increasing (preparing)
+
+Phase 3: MOVEMENT (acceleration)
+├─ Position: (5, -3) → (25, -15) → (50, -30)
+├─ Velocity: (10, -6) → (40, -24) → (60, -36)
+└─ Neural: High activity, peak firing rates
+
+Phase 4: MOVEMENT (deceleration)
+├─ Position: (100, -80) → (115, -88)
+├─ Velocity: (30, -18) → (10, -6) → (2, -1)
+└─ Neural: Activity decreasing
+
+Phase 5: TARGET HOLD
+├─ Position: (120, -90) - at target
+├─ Velocity: (0, 0) - stopped
+└─ Neural: Return to baseline
+```
+
+### Kinematic Features for Decoding
+
+**Why track kinematics?**
+
+**1. Ground Truth Labels**
+Kinematics tell you what actually happened, which is crucial for training decoders:
+```python
+# Training data
+Neural activity: [spike_counts] → Model → Predicted velocity: (vx, vy)
+Actual velocity from kinematics: (vx=10, vy=5)
+Error = Predicted - Actual
+```
+
+**2. Multiple Decoding Strategies**
+
+You can decode different things:
+
+```
+Strategy A: Position Decoder
+Neural activity → Predict (x, y)
+Best for: Cursor control, reaching tasks
+
+Strategy B: Velocity Decoder  
+Neural activity → Predict (vx, vy)
+Best for: Smooth continuous movement, prosthetics
+
+Strategy C: Direction Decoder
+Neural activity → Predict movement angle
+Best for: Simple directional control
+```
+
+**3. Feature Engineering**
+
+Derived kinematic features improve decoding:
+
+```python
+# Speed (magnitude)
+speed = sqrt(vx² + vy²)
+
+# Direction (angle)  
+angle = arctan2(vy, vx)
+
+# Distance to target
+dist = sqrt((target_x - x)² + (target_y - y)²)
+
+# Movement curvature, acceleration, jerk...
+```
+
+### Visualization: Position vs. Velocity
+
+**Position trajectory for Trial 5:**
+```
+     Start (0,0)
+        •
+        |\
+        | \
+        |  \
+        |   \
+        |    \
+        |     \
+        |      \
+        |       •
+        |      Target (120, -90)
+       
+Clean path from center to target
+```
+
+**Velocity profile for same trial:**
+```
+Speed (units/s)
+   60 |     ___
+      |    /   \
+   40 |   /     \
+      |  /       \
+   20 | /         \___
+      |/              
+    0 |________________
+      0    1    2    3s
+      
+Bell-shaped: Accelerate → Peak → Decelerate
+```
+
+### Neural Correlates of Kinematics
+
+**The magic of motor cortex:**
+
+Neurons in M1 (motor cortex) encode kinematics in their firing rates:
+
+```
+High velocity → High firing rates
+Low velocity  → Low firing rates
+Rightward     → Some neurons fire more
+Leftward      → Different neurons fire more
+```
+
+**Cosine Tuning Model:**
+
+Many motor cortex neurons follow this pattern:
+
+```
+firing_rate = baseline + α * cos(θ - θ_preferred) * speed
+
+Where:
+- θ = movement direction
+- θ_preferred = neuron's preferred direction
+- α = tuning strength
+- speed = movement speed
+```
+
+**Example:**
+```
+Neuron 42 prefers rightward movement (θ_preferred = 0°)
+
+Moving right (θ=0°):   High firing rate ✓
+Moving left (θ=180°):  Low firing rate ✗
+Moving up (θ=90°):     Medium firing rate ~
+```
+
+This is why we can decode movement from neural activity!
+
+---
+
+## Understanding Neural Manifolds
+
+### What is a Neural Manifold?
+
+A **neural manifold** is a **low-dimensional space** that captures the essential patterns of high-dimensional neural activity.
+
+**The Challenge:**
+- You record from 142 neural channels
+- Each channel can have 0-20+ spikes
+- That's a **142-dimensional space** - impossible to visualize or intuitively understand!
+
+**The Solution:**
+- Neural activity doesn't use all 142 dimensions randomly
+- Movement-related activity lies on a **low-dimensional manifold**
+- Think of it as a "road" through high-dimensional space
+
+### The Map Analogy
+
+Imagine tracking a road trip:
+
+```
+High-dimensional view:
+- 142 measurements per second
+  • Engine temperature
+  • Tire pressure (×4)
+  • Fuel level
+  • Speed
+  • GPS coordinates (x, y, z)
+  • Acceleration (x, y, z)
+  • ... [142 total measurements]
+
+Low-dimensional manifold:
+- The actual path you drove can be drawn on a 2D map
+- All 142 measurements are constrained by the fact you're following roads
+- The "manifold" is the road network
+```
+
+**Key insight:** Even though you track 142 things, the **actual behavior** (following roads) exists in a much simpler, lower-dimensional space.
+
+### Neural Manifolds in Motor Control
+
+**High-dimensional neural space:**
+```
+Channel 0: 3 spikes
+Channel 1: 0 spikes  
+Channel 2: 7 spikes
+...
+Channel 141: 2 spikes
+
+→ Point in 142-dimensional space
+```
+
+**Low-dimensional manifold:**
+```
+Instead of 142 random dimensions, movement-related activity follows patterns:
+
+Dimension 1: "Rightward vs. Leftward"  
+Dimension 2: "Upward vs. Downward"
+Dimension 3: "Fast vs. Slow"
+Dimension 4: "Reaching vs. Holding"
+
+→ Point in ~4-10 dimensional space
+```
+
+### Why Manifolds Matter for BCIs
+
+**1. Dimensionality Reduction**
+
+You can "compress" 142 channels into just a few meaningful dimensions:
+
+```python
+# Raw neural data
+spikes = [3, 0, 7, 2, 1, ..., 2]  # 142 values
+
+# Apply dimensionality reduction (e.g., PCA, UMAP)
+latent = dimensionality_reduction(spikes)  
+# latent = [0.3, -0.7, 1.2]  # Just 3 values!
+
+# Decode from latent space
+velocity = decoder(latent)
+```
+
+**Benefits:**
+- Faster computation (3 values vs. 142)
+- Less overfitting (fewer parameters to learn)
+- Better generalization
+- More interpretable (each dimension has meaning)
+
+**2. Robustness**
+
+Manifolds capture the **structure** of neural activity:
+
+```
+Problem: Electrode 42 stops working
+Solution: The manifold is still mostly intact
+
+Other electrodes still capture the same movement patterns
+Decoder can often adapt automatically
+```
+
+**3. Understanding Neural Coding**
+
+Manifolds reveal **how the brain organizes movement**:
+
+```
+Discovery: Reaching in different directions creates a circular pattern in manifold space
+
+      Up
+       ↑
+  Left • Right  ← Manifold structure
+       ↓
+      Down
+
+Implication: Brain uses a "rotational" code for direction
+```
+
+### Common Manifold Techniques
+
+**1. PCA (Principal Component Analysis)**
+
+**What it does:** Finds the directions of maximum variance in neural data
+
+```python
+from sklearn.decomposition import PCA
+
+# 142-dimensional neural data
+neural_data = spikes_matrix  # Shape: (n_samples, 142)
+
+# Reduce to 3 dimensions
+pca = PCA(n_components=3)
+latent = pca.fit_transform(neural_data)  # Shape: (n_samples, 3)
+
+# Now you can visualize in 3D!
+```
+
+**Result:**
+```
+PC1 (50% variance): Captures overall activity level (moving vs. resting)
+PC2 (25% variance): Captures left-right direction
+PC3 (15% variance): Captures up-down direction
+```
+
+**2. UMAP (Uniform Manifold Approximation and Projection)**
+
+**What it does:** Preserves local structure, great for visualization
+
+```python
+import umap
+
+reducer = umap.UMAP(n_components=2)
+latent_2d = reducer.fit_transform(neural_data)
+
+# Plot colored by target
+plt.scatter(latent_2d[:, 0], latent_2d[:, 1], c=target_ids)
+```
+
+**Result:**
+```
+     •        • ← Target 2 trials
+    ••       ••
+   
+  ••••     Target 0 trials
+ ••••••
+  ••••
+  
+     ••••← Target 1 trials
+      ••
+```
+
+Trials to the same target cluster together in manifold space!
+
+**3. Neural Latents (What PhantomLink Uses)**
+
+The **Neural Latents Benchmark** provides datasets specifically for studying manifolds:
+
+```
+Goal: Learn low-dimensional latent representations that:
+1. Capture neural dynamics
+2. Predict behavior (kinematics)
+3. Generalize across trials
+```
+
+**Common architectures:**
+- **Autoencoders:** Learn latent codes that reconstruct neural activity
+- **VAEs (Variational Autoencoders):** Add probabilistic structure
+- **RNNs/LSTMs:** Capture temporal dynamics
+- **LFADS:** State-of-the-art latent factor analysis
+
+### Manifold Analysis Example
+
+**Analyzing the MC_Maze data:**
+
+```python
+# Step 1: Collect all neural activity
+all_spikes = []
+all_targets = []
+
+for trial in range(100):
+    spikes = get_trial_spikes(trial)  # Shape: (n_timepoints, 142)
+    all_spikes.append(spikes)
+    all_targets.extend([trial.target_id] * len(spikes))
+
+X = np.vstack(all_spikes)  # Shape: (11746, 142)
+
+# Step 2: Reduce to 2D manifold
+from umap import UMAP
+reducer = UMAP(n_components=2)
+latent = reducer.fit_transform(X)  # Shape: (11746, 2)
+
+# Step 3: Visualize
+plt.scatter(latent[:, 0], latent[:, 1], 
+           c=all_targets, cmap='viridis', alpha=0.5)
+plt.title('Neural Manifold: MC_Maze')
+plt.xlabel('Latent Dimension 1')
+plt.ylabel('Latent Dimension 2')
+```
+
+**What you'll see:**
+- Clear separation between targets
+- Smooth trajectories through manifold space
+- Shared structure (all movements start from similar place)
+- Target-specific "reaches" in different directions
+
+### Advanced: Dynamical Systems View
+
+**Neural manifolds have dynamics:**
+
+```
+Think of neural activity as a ball rolling on a hilly landscape:
+
+Current state (ball position) → Neural activity now
+Dynamics (gravity, slopes)    → How activity evolves
+Attractor (valley)            → Stable movement pattern
+```
+
+**Example:**
+```
+Start: Resting state (center valley)
+Cue:   Push the ball toward a target valley
+Move:  Ball rolls along manifold (trajectory)
+Hold:  Ball settles in target valley (attractor)
+```
+
+**Why this matters:**
+- Predicting future states (where will the movement go?)
+- Understanding stability (why are some movements more reliable?)
+- Designing better decoders (that respect neural dynamics)
+
+### Practical Takeaways
+
+**For BCI Decoders:**
+
+✅ **Use manifold-aware methods:**
+```python
+# Instead of raw spikes
+decoder.fit(raw_spikes, kinematics)  # 142 dimensions
+
+# Use latent representation
+latents = manifold_reducer.transform(raw_spikes)  # 10 dimensions
+decoder.fit(latents, kinematics)  # Faster, more robust!
+```
+
+✅ **Visualize your data:**
+```python
+# Always plot neural manifolds to understand your data
+# Look for structure, outliers, target separation
+```
+
+✅ **Choose appropriate dimensionality:**
+```python
+# Too few dimensions: Loss of information
+n_components = 2  # Probably too simple
+
+# Too many dimensions: Overfitting, noise
+n_components = 100  # Probably too complex
+
+# Sweet spot for motor cortex
+n_components = 8-15  # Usually works well
+```
+
+---
+
+## Closed-Loop BCIs
+
+### What is Closed-Loop?
+
+A **closed-loop BCI** is a system where the user receives **continuous feedback** and can adapt their brain activity in real-time based on that feedback.
+
+### Open-Loop vs. Closed-Loop
+
+**Open-Loop (PhantomLink):**
+```
+Brain Activity → Decoder → Prediction
+                              ↓
+                          (no feedback to brain)
+```
+
+The brain doesn't know what the decoder is doing. This is good for:
+- Offline analysis
+- Algorithm development
+- Training initial decoders
+
+**Closed-Loop (Real BCI):**
+```
+Brain Activity → Decoder → Prediction
+      ↑                         ↓
+      └─────── Feedback ────────┘
+          (visual, haptic)
+```
+
+The brain sees the result and adapts. This is essential for:
+- Actual BCI control
+- Learning to use the interface
+- Real-world applications
+
+### The Feedback Loop
+
+**Complete cycle (repeated every 25-40ms):**
+
+```
+1. NEURAL RECORDING
+   ├─ Electrodes capture brain activity
+   └─ Spikes counted and transmitted
+
+2. DECODING
+   ├─ Computer receives neural data
+   ├─ Runs decoder algorithm
+   └─ Predicts intended movement
+
+3. FEEDBACK
+   ├─ Cursor moves on screen
+   ├─ Or robot arm moves
+   └─ User sees the result
+
+4. ADAPTATION
+   ├─ Brain sees cursor position
+   ├─ Adjusts strategy if needed
+   └─ Loop continues...
+
+Time: 25-40ms per cycle → 25-40 updates per second
+```
+
+### Why Closed-Loop Matters
+
+**1. User Learning**
+
+Users can **learn to control BCIs** through feedback:
+
+```
+Day 1: User tries to move cursor right
+       → Cursor moves somewhat randomly
+       → Brain doesn't know what patterns work
+       
+Day 7: User tries to move cursor right
+       → Cursor moves right more consistently
+       → Brain has learned which neural patterns work
+       
+Day 30: User moves cursor accurately
+        → Brain has optimized control strategy
+        → Feels natural, almost effortless
+```
+
+**Neural plasticity in action!** The brain rewires itself to work with the decoder.
+
+**2. Co-Adaptation**
+
+Both the **brain** and **decoder** adapt together:
+
+```
+Traditional approach:
+1. Record data (open-loop)
+2. Train decoder offline
+3. Test decoder (closed-loop)
+4. If bad, go back to step 1
+
+Problem: Decoder never adapts to user's learning
+
+Modern approach:
+1. Start with initial decoder
+2. User controls system (closed-loop)
+3. Decoder updates continuously from user's actions
+4. Brain adapts to decoder changes
+5. Both improve together
+
+Result: Faster learning, better performance!
+```
+
+**3. Error Correction**
+
+The brain can **correct mistakes** in real-time:
+
+```
+Scenario: Decoder predicts "move left" but user wanted "move right"
+
+Open-loop: User has no way to know or fix this
+Closed-loop: 
+  → User sees cursor moving left (wrong!)
+  → Adjusts neural activity to correct
+  → After many corrections, decoder learns better
+```
+
+### Types of Feedback
+
+**1. Visual Feedback (Most Common)**
+
+```
+Screen-based:
+├─ Cursor position
+├─ Target highlighting
+├─ Trajectory traces
+├─ Success/error indicators
+└─ Reward animations
+
+Example: User sees cursor move as they think
+```
+
+**2. Haptic Feedback**
+
+```
+Physical sensations:
+├─ Vibration motors
+├─ Force feedback
+├─ Texture simulation
+└─ Resistance in robotic limbs
+
+Example: Prosthetic hand vibrates when gripping object
+```
+
+**3. Auditory Feedback**
+
+```
+Sound-based:
+├─ Tones (pitch indicates speed/accuracy)
+├─ Clicks (confirm actions)
+├─ Music (modulated by performance)
+└─ Verbal feedback
+
+Example: Higher pitch = moving faster
+```
+
+**4. Sensory Substitution**
+
+```
+Replacing lost senses:
+├─ Electrical stimulation
+├─ Intracortical microstimulation (ICMS)
+├─ Sensory neurons activated directly
+└─ Brain interprets as "feeling"
+
+Example: Stimulating somatosensory cortex to create 
+         sensation of touch in prosthetic hand
+```
+
+### Closed-Loop Decoding Strategies
+
+**1. Supervised Learning with Update**
+
+```python
+# Initial training (open-loop data)
+decoder.fit(neural_data, kinematics)
+
+# Closed-loop operation
+while using_bci:
+    # Decode
+    spikes = read_neural_activity()
+    predicted_vel = decoder.predict(spikes)
+    
+    # Execute
+    move_cursor(predicted_vel)
+    
+    # Get user's actual intention (e.g., from clicks)
+    actual_vel = get_user_intention()
+    
+    # Update decoder
+    decoder.partial_fit(spikes, actual_vel)
+```
+
+**2. Reinforcement Learning**
+
+```python
+# No labeled data needed!
+# Decoder learns from rewards
+
+while using_bci:
+    spikes = read_neural_activity()
+    action = decoder.predict(spikes)
+    
+    # Execute action
+    new_state = execute_action(action)
+    
+    # Get reward (did it help reach the target?)
+    reward = compute_reward(new_state, target)
+    
+    # Update decoder using reward signal
+    decoder.update(spikes, action, reward)
+```
+
+**3. Kalman Filter (Adaptive)**
+
+```
+Classic closed-loop decoder:
+
+State estimation:
+├─ Predicts future state from past observations
+├─ Updates prediction when new data arrives
+├─ Balances model predictions vs. measurements
+└─ Adapts to changing statistics
+
+Perfect for smooth cursor control!
+```
+
+### Real Closed-Loop Examples
+
+**1. BrainGate Cursor Control**
+
+```
+Setup:
+- Utah array in motor cortex
+- 96 electrodes recording
+- Screen with cursor and targets
+- Real-time decoding at 30Hz
+
+User experience:
+"I imagine moving my arm right
+→ I see the cursor move right
+→ I adjust my thought to move it more
+→ Cursor responds smoothly
+→ I can click on icons, browse web, play games"
+```
+
+**Performance:**
+- Expert users: 90%+ accuracy
+- Control feels natural after practice
+- Can achieve 40-90 characters/minute typing
+
+**2. Prosthetic Arm Control**
+
+```
+Setup:
+- Neural recording from motor cortex
+- Decoder predicts arm movement
+- Robotic arm executes movement
+- Force sensors provide feedback
+- Sensation sent back to brain
+
+User experience:
+"I think about grasping a cup
+→ Robotic hand moves to cup
+→ Fingers close around it
+→ I feel pressure (via electrical stim)
+→ I adjust grip strength
+→ I lift the cup successfully"
+```
+
+**Result:** Near-natural control, can perform daily tasks
+
+**3. Communication BCI**
+
+```
+Setup:
+- EEG cap (non-invasive)
+- User imagines left vs. right hand movement
+- Decoder predicts which side
+- Letter selector highlights letters
+- User "selects" letter by imagining correct movement
+
+Speed: 5-15 characters/minute
+Accuracy: 80-95%
+```
+
+### Challenges in Closed-Loop BCIs
+
+**1. Latency**
+
+```
+Total loop time = Neural recording + Processing + Feedback delivery
+
+Too slow (>100ms):
+- Feels laggy
+- Hard to learn
+- Frustrating
+
+Optimal (<50ms):
+- Feels responsive
+- Brain can adapt quickly
+- Natural control
+```
+
+**2. Non-Stationarity**
+
+```
+Problem: Neural activity changes over time
+
+Causes:
+├─ Electrodes shift slightly
+├─ Immune response
+├─ User fatigue
+├─ Attention changes
+└─ Neural plasticity
+
+Solution: Continuously adapting decoders
+```
+
+**3. Stability vs. Adaptation**
+
+```
+Tradeoff:
+
+Too stable:
+→ Decoder doesn't adapt
+→ Performance degrades over time
+
+Too adaptive:
+→ Decoder changes too quickly  
+→ User can't keep up
+→ Unstable control
+
+Sweet spot: Slow, continuous adaptation
+```
+
+### PhantomLink as a Closed-Loop Testbed
+
+**How to simulate closed-loop with PhantomLink:**
+
+```python
+async def simulated_closed_loop():
+    """
+    Use actual kinematics as feedback to test
+    how your decoder would perform in closed-loop
+    """
+    
+    async with websockets.connect(url) as ws:
+        while True:
+            # Get packet
+            packet = await ws.recv_json()
+            
+            # Decode
+            spikes = packet['spikes']['spike_counts']
+            predicted_vel = decoder.predict([spikes])
+            
+            # Compare to actual (feedback)
+            actual_vel = (packet['kinematics']['vx'], 
+                         packet['kinematics']['vy'])
+            
+            # Calculate error
+            error = np.linalg.norm(predicted_vel - actual_vel)
+            
+            # Simulate user adaptation
+            if error > threshold:
+                # In real BCI, brain would adjust
+                # Here, we retrain decoder online
+                decoder.partial_fit([spikes], [actual_vel])
+            
+            # Track performance over time
+            performance_history.append(error)
+```
+
+**Benefits:**
+- Test decoder adaptation strategies
+- Understand learning curves
+- Optimize update rates
+- Validate stability
+
+**Limitations:**
+- No actual user learning
+- Can't test novel control strategies
+- Kinematics are pre-recorded
+
+But still valuable for algorithm development!
+
+### Future: Brain-to-Brain Interfaces
+
+**Ultimate closed-loop:**
+
+```
+Person A's Brain → Decoder → Internet → Encoder → Person B's Brain
+
+Example:
+- Person A imagines "move right"
+- Decoded as command
+- Sent to Person B's brain
+- Electrical stimulation
+- Person B's hand moves right involuntarily
+
+Currently in early research phase!
+```
+
+---
+
+## How It All Fits Together
 
 ```
 1. LOADING
@@ -813,19 +1738,27 @@ async def simple_decoder():
 
 **BCI** - Brain-Computer Interface; direct connection between brain and computer
 
+**Closed-Loop** - System where user receives feedback and can adapt their brain activity in real-time
+
 **Decoder** - Algorithm that translates brain signals into intended actions
 
 **Electrode** - Tiny sensor that records electrical activity in the brain
 
-**Kinematics** - Description of motion (position, velocity, acceleration)
+**Kinematics** - Description of motion (position, velocity, acceleration) without considering forces
 
 **M1** - Primary motor cortex; brain region that controls voluntary movement
+
+**Manifold** - Low-dimensional space that captures essential patterns of high-dimensional neural activity
 
 **Neural Channel** - One recording site/electrode in a brain implant
 
 **NWB** - Neurodata Without Borders; standard format for neuroscience data
 
+**Open-Loop** - System where brain activity is recorded but user receives no feedback
+
 **Packet** - Single snapshot of brain activity and behavior at one moment
+
+**PCA** - Principal Component Analysis; technique for dimensionality reduction
 
 **Spike** - Brief electrical signal from a neuron (action potential)
 
@@ -833,7 +1766,11 @@ async def simple_decoder():
 
 **Trial** - One complete attempt at the task
 
+**UMAP** - Uniform Manifold Approximation and Projection; technique for visualizing high-dimensional data
+
 **Utah Array** - Grid of 100 electrodes implanted in the brain
+
+**Velocity** - Speed and direction of movement (vx, vy components)
 
 ---
 
