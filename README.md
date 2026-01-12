@@ -774,3 +774,75 @@ Enable verbose logging:
 import logging
 logging.basicConfig(level=logging.DEBUG)
 ```
+
+## Running Tests
+
+PhantomLink includes a comprehensive test suite covering models, data loading, streaming engine, session management, and API endpoints.
+
+### Quick Test Run
+
+```bash
+# Install test dependencies (included in requirements.txt)
+pip install pytest pytest-asyncio pytest-cov
+
+# Run all tests
+pytest -v
+
+# Windows batch file
+test.bat
+```
+
+### Test Suites
+
+```bash
+# Unit tests only
+pytest test_models.py test_data_loader.py test_playback_engine.py test_session_manager.py -v
+
+# Integration tests
+pytest test_server.py -v
+
+# With coverage report
+pytest --cov=. --cov-report=html --cov-report=term-missing
+
+# Windows: specific test suite
+test.bat unit          # Unit tests
+test.bat integration   # Integration tests  
+test.bat coverage      # With coverage
+test.bat fast          # Skip slow tests
+```
+
+### Test Files
+
+| File | Coverage | Type |
+|------|----------|------|
+| `test_models.py` | Pydantic models | Unit |
+| `test_data_loader.py` | NWB data access | Unit |
+| `test_playback_engine.py` | 40Hz streaming | Unit |
+| `test_session_manager.py` | Multi-session | Unit |
+| `test_server.py` | FastAPI endpoints | Integration |
+| `test_calibration.py` | Manual testing | Integration |
+| `test_client.py` | Stream validation | Integration |
+| `test_multi_session.py` | Session isolation | Integration |
+
+### Coverage Report
+
+View detailed coverage:
+```bash
+pytest --cov=. --cov-report=html
+# Open htmlcov/index.html in browser
+```
+
+### CI/CD
+
+Tests run automatically on GitHub Actions for:
+- Push to `main` or `develop` branches
+- Pull requests
+- Multiple Python versions (3.9, 3.10, 3.11)
+- Multiple OS (Ubuntu, Windows, macOS)
+
+See `.github/workflows/tests.yml` for configuration.
+
+### Documentation
+
+- **Full testing guide**: [TESTING.md](TESTING.md)
+- **Quick reference**: [TEST_REFERENCE.md](TEST_REFERENCE.md)
