@@ -8,6 +8,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg)](https://fastapi.tiangolo.com)
 [![License](https://img.shields.io/badge/license-Research-green.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-MVP_Complete-success.svg)](https://github.com/yelabb/PhantomLink)
+[![Data Analysis](https://img.shields.io/badge/📊_Data_Analysis-Notebook-orange.svg)](data_analysis.ipynb)
 
 **The Ethereal/Mailtrap for Neurotechnology**
 
