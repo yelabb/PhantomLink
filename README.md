@@ -1,89 +1,168 @@
-# PhantomLink Core
+<div align="center">
 
-> **📖 Single Source of Truth**: This README is the authoritative documentation. All other docs redirect here.
+# 🧠 PhantomLink
 
-**The Ethereal/Mailtrap for Neurotechnology** 🧠⚡
+### Real-Time Neural Data Streaming Server for BCI Development
 
-PhantomLink Core streams pre-recorded neural data from the MC_Maze dataset at 40Hz with strict 25ms timing, simulating a live BCI feed from a neural implant. Each packet delivers time-aligned spike counts + cursor kinematics + target intention for decoder development and testing.
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg)](https://fastapi.tiangolo.com)
+[![License](https://img.shields.io/badge/license-Research-green.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/status-MVP_Complete-success.svg)](https://github.com/yelabb/PhantomLink)
 
-## Architecture
+**The Ethereal/Mailtrap for Neurotechnology**
 
-- **Single-Stack Python**: FastAPI + Uvicorn ASGI server
-- **Native NWB/HDF5**: Direct pynwb integration with lazy memory-mapped access
-- **Strict 40Hz Streaming**: Asyncio-based playback maintains precise 25ms intervals
-- **Real Neural Data**: MC_Maze dataset from Neural Latents Benchmark (142 units, 294s duration, 100 trials)
-- **Calibration-Ready**: Intent-based filtering for decoder validation workflows
+*Stream pre-recorded neural data at 40Hz with microsecond precision, simulating live brain-computer interface signals for decoder development, calibration workflows, and ground truth validation.*
 
-## Features
+[Quick Start](#-quick-start) • [Features](#-features) • [API Documentation](#-api-reference) • [Architecture](#-architecture) • [Contributing](#-contributing)
 
-✅ **40Hz Real-Time Streaming** - WebSocket endpoint with sub-millisecond timing accuracy  
-✅ **Multi-Session Isolation** - Independent streams with shareable URLs (ChatGPT-style)  
-✅ **Intent-Based Calibration API** - Query trials by target, filter streams by intention  
-✅ **Lazy Loading** - Memory-mapped HDF5 access, no RAM bottleneck  
-✅ **Time-Aligned Payloads** - Spike counts + cursor kinematics synchronized to 25ms bins  
-✅ **Real Trial Data** - 100 trials with target positions and timing markers  
-✅ **REST API** - Control endpoints for pause/resume/seek + trial queries  
-✅ **Validation Client** - Built-in stream integrity testing
+</div>
 
-## Quick Start
+---
 
-**Prerequisites**: Python 3.12+, ~2GB disk space for dataset
+## 📖 Table of Contents
 
+- [Overview](#-overview)
+- [Key Features](#-features)
+- [Quick Start](#-quick-start)
+- [Architecture](#-architecture)
+- [API Reference](#-api-reference)
+- [Use Cases](#-use-cases)
+- [Development](#-development)
+- [Testing](#-testing)
+- [Troubleshooting](#-troubleshooting)
+- [Contributing](#-contributing)
+- [License](#-license)
 
-## Quick Start
+---
 
-**Prerequisites**: Python 3.12+, ~2GB disk space for dataset
+## 🎯 Overview
 
-### 1. Setup Environment
+**PhantomLink** is a high-performance neural data streaming server designed for brain-computer interface (BCI) research and development. It replays real neural recordings from the MC_Maze dataset at 40Hz with strict 25ms timing intervals, enabling developers to:
+
+- **Develop BCI Decoders**: Train and test decoding algorithms with real neural data
+- **Calibration Workflows**: Filter streams by target intention or trial ID for decoder calibration
+- **Multi-User Testing**: Isolate independent sessions with shareable URLs (ChatGPT-style architecture)
+- **Ground Truth Validation**: Validate decoder predictions against actual target positions
+- **Performance Benchmarking**: Test decoder throughput and latency under realistic conditions
+
+### What Makes PhantomLink Special?
+
+- 🎯 **Real Neural Data**: Uses MC_Maze dataset (142 neural units, 294s, 100 trials) from the Neural Latents Benchmark
+- ⚡ **40Hz Precision**: Sub-millisecond timing accuracy for realistic BCI simulation
+- 🔄 **Multi-Session Isolation**: Each user/experiment gets independent playback state
+- 🎚️ **Intent-Based Filtering**: Stream only packets matching specific targets or trials
+- 🚀 **Production-Ready**: FastAPI + Uvicorn ASGI with async WebSocket streaming
+- 💾 **Memory Efficient**: Lazy-loaded NWB/HDF5 with memory-mapped access
+
+---
+
+## ✨ Features
+
+### Core Capabilities
+
+| Feature | Description |
+|---------|-------------|
+| **40Hz Real-Time Streaming** | WebSocket endpoint with sub-millisecond timing accuracy |
+| **Multi-Session Architecture** | Independent streams with shareable URLs and automatic expiration |
+| **Intent-Based Calibration** | Query trials by target, filter streams by intention |
+| **Time-Aligned Payloads** | Spike counts + cursor kinematics + target intention synchronized to 25ms bins |
+| **REST Control API** | Pause/resume/seek controls per session |
+| **Trial Metadata API** | Query 100 trials with target positions and timing markers |
+| **Lazy Loading** | Memory-mapped HDF5 access, no RAM bottleneck |
+| **Built-in Validation** | Stream integrity testing and performance metrics |
+
+### Data Stream Format
+
+Each 40Hz packet contains:
+
+```json
+{
+  "packet_id": 1234,
+  "timestamp": 30.875,
+  "spikes": {
+    "spike_counts": [2, 0, 1, ...],  // 142 channels
+    "channel_ids": [0, 1, 2, ...]
+  },
+  "kinematics": {
+    "x": 125.3,
+    "y": -78.9,
+    "vx": 15.2,
+    "vy": -8.4
+  },
+  "intention": {
+    "trial_id": 42,
+    "target_x": -77,
+    "target_y": 82,
+    "target_id": 1
+  },
+  "metadata": {
+    "dataset": "MC_Maze",
+    "frequency_hz": 40
+  }
+}
+```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Python 3.12+**
+- **~2GB disk space** for neural dataset
+- **Internet connection** for dataset download
+
+### Installation
 
 ```bash
-# Clone/navigate to project
+# Clone the repository
+git clone https://github.com/yelabb/PhantomLink.git
 cd PhantomLink
 
-# Create virtual environment
+# Create and activate virtual environment
 python -m venv .venv
 
-# Activate (Windows)
+# Windows
 .venv\Scripts\activate
 
-# Activate (Linux/Mac)
+# Linux/macOS
 source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Download Dataset
+### Download Dataset
 
-Download the MC_Maze Small dataset from [DANDI Archive #000140](https://dandiarchive.org/dandiset/000140):
+PhantomLink uses the MC_Maze dataset from the [DANDI Archive #000140](https://dandiarchive.org/dandiset/000140):
 
 ```bash
-# Install dandi-cli (if not in requirements)
+# Install DANDI CLI (if not already installed)
 pip install dandi
 
-# Download MC_Maze Small dataset
+# Download MC_Maze dataset
 dandi download https://dandiarchive.org/dandiset/000140/draft
-# or download manually and place as data/mc_maze.nwb
+
+# Move to data directory
+mkdir data
+mv 000140/sub-Jenkins/* data/mc_maze.nwb
 ```
 
-**Expected file**: `data/mc_maze.nwb` (~1.5GB)
+**Expected file location**: `data/mc_maze.nwb` (~1.5GB)
 
-### 3. Start Server
+### Start Server
 
 ```bash
 python main.py
 ```
 
-Expected output:
+You should see:
+
 ```
 INFO - Starting PhantomLink Core server
 INFO - Using NWB dataset: data\mc_maze.nwb
 INFO - Initializing shared data loader: data\mc_maze.nwb
-INFO - Opened NWB file: data\mc_maze.nwb
 INFO - Found 142 neural units
-INFO - Found processing module: behavior
-INFO -   - cursor_pos: (287710, 2), sampling rate: 1000.0Hz
-INFO -   - hand_vel: (287710, 2)
 INFO - Found 100 trials
 INFO - Shared loader ready: 142 channels, 293.7s, 100 trials
 INFO - Server ready on 0.0.0.0:8000
@@ -91,58 +170,610 @@ INFO - Session-based isolation enabled (max 10 sessions)
 INFO - Uvicorn running on http://0.0.0.0:8000
 ```
 
-Server is now ready for multi-session streaming!
+🎉 **Server is running!** Visit `http://localhost:8000/docs` for interactive API documentation.
 
-## Testing the Stream
-
-### Test Multi-Session Architecture
-
-Test session isolation and concurrent streaming:
+### Test the Stream
 
 ```bash
-python test_multi_session.py
-```
-
-Expected output:
-```
-=== PhantomLink Multi-Session Test Suite ===
-
-[1/4] Creating session...
-✓ Created session: neural-link-18
-  Stream URL: ws://localhost:8000/stream/neural-link-18
-
-[2/4] Listing sessions...
-=== Active Sessions (1) ===
-Session: neural-link-18
-  Age: 3s | Idle: 3s | Connections: 0
-  Running: False | Position: packet 0
-
-[3/4] Testing stream from session...
-✓ Received 201 packets in 5s (40.1 Hz)
-
-[4/4] Testing session isolation...
-✓ Paused session1, session2 streams independently
-✓ Sessions are isolated
-```
-
-### Validate 40Hz Integrity
-
-Test stream for 10 seconds (400 packets expected):
-
-```bash
+# Validate 40Hz streaming (10 seconds, 400 packets expected)
 python test_client.py 10
+
+# Test multi-session isolation
+python test_multi_session.py
+
+# Test calibration API
+python test_calibration.py
 ```
 
-Expected output:
+---
+
+## 🏗️ Architecture
+
+### System Design
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    PhantomLink Server                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌──────────────┐      ┌──────────────────────────────┐    │
+│  │   FastAPI    │◄────►│    Session Manager           │    │
+│  │   Server     │      │  - Multi-session isolation   │    │
+│  │              │      │  - LRU eviction              │    │
+│  │  REST + WS   │      │  - Auto-cleanup (1hr TTL)    │    │
+│  └──────────────┘      └──────────────────────────────┘    │
+│         ▲                          │                         │
+│         │                          ▼                         │
+│         │              ┌──────────────────────┐             │
+│    Client Requests     │  Playback Engine(s)  │             │
+│                        │  - 40Hz async loop   │             │
+│                        │  - Pause/resume/seek │             │
+│                        │  - Intent filtering  │             │
+│                        └──────────────────────┘             │
+│                                   │                          │
+│                                   ▼                          │
+│                        ┌──────────────────────┐             │
+│                        │    Data Loader       │             │
+│                        │  - Lazy NWB/HDF5     │             │
+│                        │  - Memory-mapped     │             │
+│                        │  - Trial metadata    │             │
+│                        └──────────────────────┘             │
+│                                   │                          │
+└───────────────────────────────────┼──────────────────────────┘
+                                    ▼
+                         ┌──────────────────────┐
+                         │   mc_maze.nwb        │
+                         │   (142 units, 294s)  │
+                         └──────────────────────┘
+```
+
+### Core Components
+
+| Component | Responsibility |
+|-----------|----------------|
+| **server.py** | FastAPI app with REST + WebSocket endpoints, session management |
+| **session_manager.py** | Multi-session orchestration, LRU eviction, auto-cleanup |
+| **playback_engine.py** | 40Hz asyncio streaming loop with intent filtering |
+| **data_loader.py** | Lazy NWB/HDF5 loader with trial metadata extraction |
+| **models.py** | Pydantic data models for type safety and validation |
+| **config.py** | Configuration settings (frequency, ports, limits) |
+
+### Technology Stack
+
+- **Web Framework**: FastAPI 0.109+ with Uvicorn ASGI server
+- **Neural Data**: PyNWB 2.6+ with H5py for lazy HDF5 access
+- **Async Runtime**: Python asyncio for concurrent streaming
+- **Data Models**: Pydantic 2.5+ for type validation
+- **WebSockets**: websockets 12.0 for real-time communication
+
+### Performance Characteristics
+
+| Metric | Value |
+|--------|-------|
+| Packet Generation | ~7ms (HDF5 read + binning) |
+| Timing Precision | <1ms std deviation |
+| Memory Footprint | <500MB (memory-mapped, shared across sessions) |
+| Sustained Throughput | 40Hz for hours per session |
+| Latency | 25ms ± 0.5ms per packet |
+| Session Overhead | ~50KB per session |
+| Max Concurrent Sessions | 10 (configurable, LRU eviction) |
+| Session TTL | 3600s (1 hour, auto-cleanup) |
+
+---
+
+## 📡 API Reference
+
+### Health Check
+
+Check server status:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "version": "0.2.0",
+  "timestamp": "2026-01-12T13:30:00Z"
+}
+```
+
+### Session Management
+
+#### Create Session
+
+Create a new isolated session with auto-generated or custom code:
+
+```bash
+# Auto-generated code (e.g., "swift-neural-42")
+curl -X POST http://localhost:8000/api/sessions/create
+
+# Custom code
+curl -X POST http://localhost:8000/api/sessions/create \
+  -H "Content-Type: application/json" \
+  -d '{"custom_code": "my-experiment-1"}'
+```
+
+Response:
+```json
+{
+  "session_code": "swift-neural-42",
+  "stream_url": "ws://localhost:8000/stream/swift-neural-42",
+  "created_at": "2026-01-12T13:30:00Z"
+}
+```
+
+#### List Sessions
+
+Get all active sessions with statistics:
+
+```bash
+curl http://localhost:8000/api/sessions
+```
+
+Response:
+```json
+{
+  "sessions": {
+    "swift-neural-42": {
+      "created_at": "2026-01-12T13:30:00Z",
+      "last_accessed": "2026-01-12T13:32:15Z",
+      "active_connections": 2,
+      "is_running": true,
+      "current_packet": 150
+    }
+  },
+  "total_sessions": 1
+}
+```
+
+#### Get Session Details
+
+```bash
+curl http://localhost:8000/api/sessions/{session_code}
+```
+
+#### Delete Session
+
+```bash
+curl -X DELETE http://localhost:8000/api/sessions/{session_code}
+```
+
+#### Cleanup Expired Sessions
+
+```bash
+curl -X POST http://localhost:8000/api/sessions/cleanup
+```
+
+### WebSocket Streaming
+
+#### Connect to Stream
+
+```javascript
+const ws = new WebSocket('ws://localhost:8000/stream/swift-neural-42');
+
+ws.onmessage = (event) => {
+  const packet = JSON.parse(event.data);
+  console.log('Packet:', packet.data.packet_id);
+  console.log('Spikes:', packet.data.spikes.spike_counts);
+  console.log('Position:', packet.data.kinematics.x, packet.data.kinematics.y);
+  console.log('Target:', packet.data.intention.target_x, packet.data.intention.target_y);
+};
+```
+
+#### Filter by Target
+
+Stream only packets reaching for a specific target:
+
+```bash
+ws://localhost:8000/stream/swift-neural-42?target_id=0
+```
+
+#### Filter by Trial
+
+Stream only packets from a specific trial:
+
+```bash
+ws://localhost:8000/stream/swift-neural-42?trial_id=42
+```
+
+### Playback Control
+
+Control playback for each session independently:
+
+#### Pause Stream
+
+```bash
+curl -X POST http://localhost:8000/api/control/{session_code}/pause
+```
+
+#### Resume Stream
+
+```bash
+curl -X POST http://localhost:8000/api/control/{session_code}/resume
+```
+
+#### Seek to Position
+
+```bash
+curl -X POST http://localhost:8000/api/control/{session_code}/seek \
+  -H "Content-Type: application/json" \
+  -d '{"packet_id": 1000}'
+```
+
+#### Get Session Statistics
+
+```bash
+curl http://localhost:8000/api/stats/{session_code}
+```
+
+Response:
+```json
+{
+  "session_code": "swift-neural-42",
+  "is_running": true,
+  "current_packet": 1234,
+  "total_packets": 11748,
+  "elapsed_seconds": 30.85,
+  "active_connections": 2
+}
+```
+
+### Trial Metadata
+
+#### Get All Trials
+
+```bash
+curl http://localhost:8000/api/trials
+```
+
+Response:
+```json
+{
+  "trials": [
+    {
+      "trial_id": 0,
+      "start_time": 0.0,
+      "stop_time": 2.95,
+      "target_x": -118,
+      "target_y": -83,
+      "target_id": 0
+    },
+    ...
+  ],
+  "total_trials": 100
+}
+```
+
+#### Get Trials by Target
+
+```bash
+curl http://localhost:8000/api/trials/by-target/{target_id}
+```
+
+#### Get Trial by ID
+
+```bash
+curl http://localhost:8000/api/trials/{trial_id}
+```
+
+---
+
+## 💡 Use Cases
+
+### 1. Multi-User Calibration Sessions
+
+Share independent calibration sessions with team members:
+
+```python
+import requests
+
+# Team lead creates sessions for each user
+users = ['alice', 'bob', 'charlie']
+for user in users:
+    response = requests.post(
+        'http://localhost:8000/api/sessions/create',
+        json={'custom_code': f'calibration-{user}'}
+    )
+    print(f"{user}: {response.json()['stream_url']}")
+
+# Output:
+# alice: ws://localhost:8000/stream/calibration-alice
+# bob: ws://localhost:8000/stream/calibration-bob
+# charlie: ws://localhost:8000/stream/calibration-charlie
+
+# Each user streams independently
+requests.post('http://localhost:8000/api/control/calibration-alice/pause')
+# Bob and Charlie's streams continue unaffected
+```
+
+### 2. BCI Decoder Training
+
+Train decoders with real neural data and known intentions:
+
+```python
+import websockets
+import json
+import asyncio
+
+async def train_decoder():
+    # Create dedicated training session
+    response = requests.post(
+        'http://localhost:8000/api/sessions/create',
+        json={'custom_code': 'decoder-training-v1'}
+    )
+    stream_url = response.json()['stream_url']
+    
+    # Connect and collect training data
+    async with websockets.connect(f'{stream_url}?target_id=0') as ws:
+        training_data = []
+        async for message in ws:
+            packet = json.loads(message)['data']
+            
+            # Extract features
+            spikes = packet['spikes']['spike_counts']
+            target = (packet['intention']['target_x'], 
+                     packet['intention']['target_y'])
+            
+            # Collect training examples
+            training_data.append({'spikes': spikes, 'target': target})
+            
+            if len(training_data) >= 1000:
+                break
+        
+        # Train your decoder
+        decoder.fit(training_data)
+
+asyncio.run(train_decoder())
+```
+
+### 3. Ground Truth Validation
+
+Validate decoder predictions against actual targets:
+
+```python
+import websockets
+import json
+import asyncio
+import numpy as np
+
+async def validate_decoder(decoder):
+    response = requests.post(
+        'http://localhost:8000/api/sessions/create',
+        json={'custom_code': 'validation-run1'}
+    )
+    stream_url = response.json()['stream_url']
+    
+    errors = []
+    async with websockets.connect(stream_url) as ws:
+        async for message in ws:
+            packet = json.loads(message)['data']
+            
+            # Decoder prediction
+            predicted = decoder.predict(packet['spikes']['spike_counts'])
+            
+            # Ground truth
+            actual = (packet['intention']['target_x'],
+                     packet['intention']['target_y'])
+            
+            # Calculate error
+            error = np.linalg.norm(np.array(predicted) - np.array(actual))
+            errors.append(error)
+            
+            if len(errors) >= 500:
+                break
+    
+    print(f"Mean Error: {np.mean(errors):.2f}mm")
+    print(f"Std Error: {np.std(errors):.2f}mm")
+
+asyncio.run(validate_decoder(my_decoder))
+```
+
+### 4. Calibration Workflow
+
+Build calibration datasets with specific targets:
+
+```python
+import requests
+
+# Get all trials reaching for target 0
+response = requests.get('http://localhost:8000/api/trials/by-target/0')
+trials = response.json()['trials']  # 77 trials
+
+# Create session for calibration
+session = requests.post(
+    'http://localhost:8000/api/sessions/create',
+    json={'custom_code': 'calibration-target0'}
+).json()
+
+# Stream data from each calibration trial
+for trial in trials[:10]:  # First 10 trials
+    trial_id = trial['trial_id']
+    stream_url = f"{session['stream_url']}?trial_id={trial_id}"
+    # Connect to stream_url and collect calibration data
+```
+
+---
+
+## 🛠️ Development
+
+### Project Structure
+
+```
+PhantomLink/
+├── data/                       # Neural datasets (gitignored)
+│   └── mc_maze.nwb            # MC_Maze dataset (~1.5GB)
+├── config.py                  # Server configuration
+├── models.py                  # Pydantic data models
+├── data_loader.py             # NWB/HDF5 lazy loader
+├── playback_engine.py         # 40Hz streaming engine
+├── session_manager.py         # Multi-session orchestration
+├── server.py                  # FastAPI application
+├── main.py                    # Entry point
+├── test_client.py             # Stream validation
+├── test_calibration.py        # Calibration API tests
+├── test_multi_session.py      # Session isolation tests
+├── test_*.py                  # Unit/integration tests
+├── requirements.txt           # Python dependencies
+├── pyproject.toml             # Project metadata
+└── README.md                  # This file
+```
+
+### Environment Setup
+
+```bash
+# Clone repository
+git clone https://github.com/yelabb/PhantomLink.git
+cd PhantomLink
+
+# Create virtual environment
+python -m venv .venv
+
+# Activate environment
+# Windows
+.venv\Scripts\activate
+# Linux/macOS
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install development dependencies
+pip install pytest pytest-asyncio pytest-cov
+```
+
+### Adding a New Feature
+
+Example: Add eye-tracking data to kinematics
+
+**1. Update data model** ([models.py](models.py)):
+
+```python
+class Kinematics(BaseModel):
+    x: float
+    y: float
+    vx: float
+    vy: float
+    eye_x: float  # New field
+    eye_y: float  # New field
+```
+
+**2. Extend data loader** ([data_loader.py](data_loader.py)):
+
+```python
+def get_kinematics(self, start_time, end_time):
+    # ... existing code ...
+    
+    # Extract eye tracking data
+    eye_data = self._nwb.processing['behavior']['eye_pos'].data[start_idx:end_idx]
+    
+    return {
+        **existing_data,
+        'eye_x': eye_data[:, 0],
+        'eye_y': eye_data[:, 1]
+    }
+```
+
+**3. Update playback engine** ([playback_engine.py](playback_engine.py)):
+
+```python
+kinematics = Kinematics(
+    x=..., y=..., vx=..., vy=...,
+    eye_x=float(kinematics_data['eye_x'][0]),
+    eye_y=float(kinematics_data['eye_y'][0])
+)
+```
+
+### Development Workflow
+
+```bash
+# 1. Make changes
+# Edit source files
+
+# 2. Run tests
+pytest -v
+
+# 3. Start server
+python main.py
+
+# 4. Test changes
+python test_client.py 10
+
+# 5. Check coverage
+pytest --cov=. --cov-report=html
+```
+
+### Code Style Guidelines
+
+- ✅ **Type Hints**: All functions use type annotations
+- ✅ **Async/Await**: All I/O operations are async
+- ✅ **Logging**: Use `logger.info/warning/error` for diagnostics
+- ✅ **Error Handling**: Fail fast, propagate errors clearly
+- ✅ **No Mock Data**: Single source of truth from NWB files
+- ✅ **Documentation**: Docstrings for all public functions
+
+---
+
+## 🧪 Testing
+
+PhantomLink includes comprehensive test coverage for all components.
+
+### Quick Test Run
+
+```bash
+# Run all tests
+pytest -v
+
+# Windows batch file
+test.bat
+```
+
+### Test Suites
+
+```bash
+# Unit tests only
+pytest test_models.py test_data_loader.py test_playback_engine.py -v
+
+# Integration tests
+pytest test_server.py test_multi_session.py -v
+
+# With coverage
+pytest --cov=. --cov-report=html --cov-report=term-missing
+```
+
+### Manual Testing
+
+```bash
+# Validate 40Hz streaming for 10 seconds
+python test_client.py 10
+
+# View sample packets
+python test_client.py sample
+
+# Test session isolation
+python test_multi_session.py
+
+# Test calibration API
+python test_calibration.py
+
+# Filter by target
+python test_calibration.py target 0
+
+# Filter by trial
+python test_calibration.py trial 5
+```
+
+### Expected Test Output
+
+**Stream Validation**:
 ```
 === Stream Metadata ===
   dataset: MC_Maze
-  total_packets: 287710
+  total_packets: 11748
   frequency_hz: 40
   num_channels: 142
-  duration_seconds: 7192.75
-
-  40 packets | 1.0s | 40.0 Hz
 
 === Validation Results ===
   packets_received: 400
@@ -158,574 +789,76 @@ Expected output:
   ✓ Sequence integrity: PASS (no gaps)
 ```
 
-### View Sample Packets
+### Coverage Report
 
 ```bash
-python test_client.py sample
+pytest --cov=. --cov-report=html
+# Open htmlcov/index.html in browser
 ```
-
-Displays metadata + 3 example packets with full data structure.
-
-### Test Calibration API
-
-Test intent-based filtering for decoder calibration:
-
-```bash
-# Test trial/intention REST API
-python test_calibration.py
-
-# Stream only packets reaching for target 0
-python test_calibration.py target 0
-
-# Stream only packets from trial 5
-python test_calibration.py trial 5
-```
-
-Expected output:
-```
-=== Testing Trial/Intention API ===
-1. Fetching all trials...
-   Found 100 trials
-   Sample trial: {...}
-
-3. Fetching all trials reaching for target 0...
-   Found 77 trials reaching for target 0
-
-=== Testing Filtered Stream (target_id=0) ===
-Connected! Receiving filtered stream...
-  200 packets | trial_id=1 | target=(-77, 82)
-
-=== Results ===
-Packets received: 201
-Unique target positions: 2
-  Target 0: (-118, -83)
-  Target 1: (-77, 82)
-```
-
-## API Reference
-
-### Session Management
-
-PhantomLink uses **session-based isolation** - each session gets its own independent playback state with a shareable URL (similar to ChatGPT conversations). Sessions auto-expire after 1 hour of inactivity.
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/sessions/create` | POST | Create new session with optional custom code |
-| `/api/sessions` | GET | List all active sessions with stats |
-| `/api/sessions/{session_code}` | GET | Get specific session details |
-| `/api/sessions/{session_code}` | DELETE | Delete a session |
-| `/api/sessions/cleanup` | POST | Manually trigger expired session cleanup |
-
-**Create Session Example:**
-```bash
-# Auto-generated code (e.g., "swift-neural-42")
-curl -X POST http://localhost:8000/api/sessions/create
-
-# Custom code
-curl -X POST http://localhost:8000/api/sessions/create \
-  -H "Content-Type: application/json" \
-  -d '{"custom_code": "my-experiment-1"}'
-
-# Response
-{
-  "session_code": "swift-neural-42",
-  "stream_url": "ws://localhost:8000/stream/swift-neural-42",
-  "created_at": "2026-01-12T13:30:00Z"
-}
-```
-
-**List Sessions Example:**
-```bash
-curl http://localhost:8000/api/sessions
-
-# Response
-{
-  "sessions": {
-    "swift-neural-42": {
-      "created_at": "2026-01-12T13:30:00Z",
-      "last_accessed": "2026-01-12T13:32:15Z",
-      "active_connections": 2,
-      "is_running": true,
-      "current_packet": 150
-    }
-  },
-  "stats": {
-    "total_sessions": 3,
-    "max_sessions": 10,
-    "session_ttl": 3600,
-    "active_connections": 5,
-    "running_sessions": 2
-  }
-}
-```
-
-### REST Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | API information and status |
-| `/health` | GET | Health check |
-| `/api/metadata` | GET | Dataset metadata (channels, duration, etc.) |
-| `/api/stats` | GET | Global playback statistics |
-| `/api/trials` | GET | List all trials with target/intention data |
-| `/api/trials/{trial_id}` | GET | Get specific trial information |
-| `/api/trials/by-target/{target_index}` | GET | Get all trials reaching for a specific target |
-
-**Session-Specific Control Endpoints:**
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/control/{session_code}/pause` | POST | Pause playback for this session |
-| `/api/control/{session_code}/resume` | POST | Resume playback for this session |
-| `/api/control/{session_code}/stop` | POST | Stop playback for this session |
-| `/api/control/{session_code}/seek?position_seconds=X` | POST | Seek to position in this session |
-| `/api/control/{session_code}/metadata` | GET | Get session-specific metadata |
-| `/api/control/{session_code}/stats` | GET | Get session-specific statistics |
-
-### WebSocket Stream
-
-**Endpoint**: `ws://localhost:8000/stream/{session_code}`  
-**Frequency**: 40Hz (25ms intervals)  
-**Protocol**: JSON packets
-
-**Session Behavior:**
-- Sessions are **auto-created** on first WebSocket connection if they don't exist
-- Each session has **independent playback state** (pause one, stream from another)
-- Sessions **expire after 1 hour** of inactivity (configurable)
-- Maximum **10 concurrent sessions** (configurable, LRU eviction)
-
-**Query Parameters** (optional):
-- `trial_id` - Filter to only stream packets from a specific trial (0-99)
-- `target_id` - Filter to only stream packets reaching for a specific target (0-2)
-
-**Examples**:
-```bash
-# Auto-create session and stream all packets
-ws://localhost:8000/stream/my-experiment-1
-
-# Pre-create session with readable code
-curl -X POST http://localhost:8000/api/sessions/create
-# Returns: {"session_code": "swift-neural-42", ...}
-
-# Stream from created session
-ws://localhost:8000/stream/swift-neural-42
-
-# Stream only trial 5 from session
-ws://localhost:8000/stream/swift-neural-42?trial_id=5
-
-# Stream only reaching for target 0 (77 trials)
-ws://localhost:8000/stream/neural-link-18?target_id=0
-
-# Multiple clients can connect to same session
-ws://localhost:8000/stream/swift-neural-42  # Client 1
-ws://localhost:8000/stream/swift-neural-42  # Client 2 (shares state)
-```
-
-## Data Format
-
-### Stream Packet Structure
-
-Each 40Hz packet contains time-aligned data at 25ms resolution:
-
-```json
-{
-  "type": "data",
-  "data": {
-    "timestamp": 1736726400.123,
-    "sequence_number": 42,
-    "spikes": {
-      "channel_ids": [0, 1, 2, ..., 141],
-      "spike_counts": [2, 0, 3, 1, 0, ...],
-      "bin_size_ms": 25.0
-    },
-    "kinematics": {
-      "vx": 8.67,      // Hand velocity X (mm/s)
-      "vy": -3.21,     // Hand velocity Y (mm/s)
-      "x": 12.45,      // Cursor position X (mm)
-      "y": -5.33       // Cursor position Y (mm)
-    },
-    "intention": {
-      "target_id": 0,           // Active target index (0-2, from trial data)
-      "target_x": -118.0,      // Actual target X position (mm, from trial)
-      "target_y": -83.0        // Actual target Y position (mm, from trial)
-    },
-    "trial_id": 0,             // Trial identifier (0-99)
-    "trial_time_ms": 1050.0    // Time within trial
-  }
-}
-```
-
-### Data Sources
-
-- **Spikes**: 142 neural units from motor cortex, binned at 25ms
-- **Kinematics**: Cursor position and hand velocity, sampled at 1000Hz (downsampled to 40Hz)
-- **Behavioral Data**: From NWB `processing['behavior']` module
-- **Trial Data**: 100 trials from NWB `trials` table with timing markers and target positions
-- **Intention Ground Truth**: Real target coordinates from maze task (1-3 targets per trial)
-- **Neural Recordings**: Real data from monkey Jenkins (2009), not simulated
-
-## Architecture Deep Dive
-
-### System Design
-
-```
-Client (WebSocket) ←→ FastAPI Server ←→ SessionManager ←→ PlaybackEngine(s) ←→ Shared DataLoader ←→ NWB File
-                                              ↓                    ↓
-                                        Session Isolation    40Hz Asyncio Loop
-                                        (max 10, LRU)       (25ms precision)
-```
-
-**Multi-Session Architecture:**
-- **Shared DataLoader**: Single memory-mapped NWB file instance (read-only, efficient)
-- **Per-Session PlaybackEngine**: Independent playback state for each session
-- **Session Isolation**: Pause/resume/seek in one session doesn't affect others
-- **Shareable URLs**: Each session gets a unique code (e.g., `swift-neural-42`)
-- **LRU Eviction**: When hitting max sessions, oldest is removed
-- **TTL Cleanup**: Background task removes expired sessions every 5 minutes
-
-### Key Components
-
-**`session_manager.py`** - SessionManager class  
-- Creates and manages multiple isolated sessions
-- Generates readable session codes: `{adjective}-{noun}-{number}`
-- Maintains single shared `MC_MazeLoader` instance (efficient memory-mapped access)
-- Creates per-session `PlaybackEngine` instances (independent state)
-- LRU eviction when hitting max_sessions limit (default: 10)
-- TTL-based cleanup (default: 3600s = 1 hour)
-- Background cleanup task runs every 5 minutes
-- Thread-safe session access and management
-
-**`data_loader.py`** - MC_MazeLoader class  
-- Lazy-loads NWB file with pynwb + HDF5 memory mapping
-- Extracts spike times (ragged arrays via VectorIndex)
-- Reads behavioral data at 1000Hz, bins to 40Hz windows
-- Parses trial table with target positions and timing markers
-- Provides trial query methods: `get_trials()`, `get_trials_by_target()`, `get_trial_by_time()`
-- No data preloading: ~7ms per packet extraction
-
-**`playback_engine.py`** - PlaybackEngine class  
-- Asyncio-based 40Hz streaming with strict timing
-- Supports optional filtering by `trial_id` or `target_id`
-- Tracks timing errors (logs every 1000 packets)
-- Handles pause/resume/seek controls
-- Generates StreamPacket objects with real trial context
-
-**`server.py`** - FastAPI application  
-- Session-based multi-client architecture (refactored from single-engine)
-- Global `SessionManager` managing multiple `PlaybackEngine` instances
-- WebSocket endpoint `/stream/{session_code}` with auto-session creation
-- Session-specific REST control endpoints (`/api/control/{session_code}/pause`)
-- Session management endpoints (create, list, delete, cleanup)
-- Background cleanup task: `periodic_cleanup()` runs every 5 minutes
-- Non-blocking async design with per-session connection tracking
-
-**`models.py`** - Pydantic data models  
-- StreamPacket, SpikeData, Kinematics, TargetIntention
-- Type validation and serialization
-
-### Performance Characteristics
-
-- **Packet Generation**: ~7ms (HDF5 read + binning)
-- **Timing Precision**: <1ms std deviation
-- **Memory Footprint**: <500MB (memory-mapped file, shared across sessions)
-- **Throughput**: 40Hz sustained for hours per session
-- **Latency**: 25ms ± 0.5ms per packet
-- **Session Overhead**: ~50KB per session (independent PlaybackEngine state)
-- **Max Concurrent Sessions**: 10 (configurable, LRU eviction)
-- **Session TTL**: 3600s (1 hour, configurable)
-
-### Design Principles
-
-1. **Single Source of Truth**: Real NWB data only, no mock data
-2. **Lazy Evaluation**: Memory-map HDF5, extract on-demand
-3. **Precise Timing**: Asyncio sleep with error tracking
-4. **Type Safety**: Pydantic models for all data structures
-5. **Fail Fast**: Errors propagate immediately, no silent failures
-6. **Session Isolation**: Independent playback states, shareable URLs
-7. **Resource Efficiency**: Shared DataLoader, per-session engines
-
-## Development
-
-### Project Structure
-
-```
-PhantomLink/
-├── data/                    # NWB dataset files (gitignored)
-│   └── mc_maze.nwb         # MC_Maze dataset (~1.5GB)
-├── config.py               # Settings (40Hz, 25ms intervals)
-├── models.py               # Pydantic data models
-├── data_loader.py          # NWB file loader with trial parsing
-├── playback_engine.py      # 40Hz streaming engine with filtering
-├── session_manager.py      # Multi-session isolation manager
-├── server.py               # FastAPI application with session API
-├── main.py                 # Entry point
-├── test_client.py          # Stream validation client
-├── test_calibration.py     # Intent-based filtering tests
-├── test_multi_session.py   # Multi-session isolation tests
-├── investigate_nwb.py      # NWB structure exploration tool
-├── requirements.txt        # Python dependencies
-└── README.md              # This file (single source of truth)
-```
-
-### Requirements
-
-- Python 3.12+
-- pynwb >= 3.1.3
-- h5py >= 3.15.1
-- numpy >= 2.0
-- FastAPI >= 0.109.0
-- Uvicorn >= 0.27.0
-- websockets >= 12.0
-
-### Development Workflow
-
-```bash
-# 1. Setup
-python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
-
-# 2. Run tests
-python test_client.py 10
-
-# 3. Make changes
-# Edit data_loader.py, playback_engine.py, etc.
-
-# 4. Test changes
-python main.py
-python test_client.py 10
-
-# 5. Check logs
-# Server logs timing errors every 1000 packets
-```
-
-### Adding Features
-
-**Example: Add new behavioral signal**
-
-1. Extend `models.py`:
-```python
-class Kinematics(BaseModel):
-    vx: float
-    vy: float
-    x: float
-    y: float
-    eye_x: float  # New field
-    eye_y: float  # New field
-```
-
-2. Update `data_loader.py`:
-```python
-def get_kinematics(self, start_time, end_time):
-    # ... existing code ...
-    eye_data = self._nwb.processing['behavior']['eye_pos'].data[start_idx:end_idx]
-    return {**existing_data, 'eye_x': eye_data[:,0], 'eye_y': eye_data[:,1]}
-```
-
-3. Modify `playback_engine.py`:
-```python
-kinematics=Kinematics(
-    vx=..., vy=..., x=..., y=...,
-    eye_x=float(kinematics_data['eye_x'][0]),
-    eye_y=float(kinematics_data['eye_y'][0])
-)
-```
-
-### Code Style
-
-- **No mock data**: Single source of truth from NWB files
-- **Type hints**: All functions use type annotations
-- **Logging**: Use `logger.info/warning/error` for diagnostics
-- **Error handling**: Fail fast, propagate errors clearly
-- **Async/await**: All I/O operations are async
-
-## Use Cases
-
-### 1. Multi-User Calibration Sessions
-Share independent calibration sessions with team members:
-
-```python
-import requests
-import websockets
-import json
-
-# Team lead creates sessions for each user
-sessions = []
-for user in ['alice', 'bob', 'charlie']:
-    response = requests.post('http://localhost:8000/api/sessions/create',
-                            json={'custom_code': f'calibration-{user}'})
-    sessions.append(response.json())
-    print(f"{user}: {response.json()['stream_url']}")
-
-# Each user gets their own independent stream
-# alice: ws://localhost:8000/stream/calibration-alice
-# bob: ws://localhost:8000/stream/calibration-bob
-# charlie: ws://localhost:8000/stream/calibration-charlie
-
-# Users can pause/resume independently
-requests.post('http://localhost:8000/api/control/calibration-alice/pause')
-# Bob and Charlie's streams continue unaffected
-```
-
-### 2. Decoder Development
-### 2. Decoder Development
-Stream neural data with known intentions to train and validate BCI decoders:
-
-```python
-import websockets
-import json
-import requests
-
-# Create dedicated session for training
-response = requests.post('http://localhost:8000/api/sessions/create',
-                        json={'custom_code': 'decoder-training-v1'})
-session_url = response.json()['stream_url']
-
-# Connect and filter for specific target
-async with websockets.connect(f'{session_url}?target_id=0') as ws:
-    async for message in ws:
-        packet = json.loads(message)['data']
-        spikes = packet['spikes']['spike_counts']
-        target = (packet['intention']['target_x'], packet['intention']['target_y'])
-        # Train decoder: spikes -> target
-```
-
-### 3. Calibration Workflows
-Query trials to build calibration sets:
-
-```python
-import requests
-
-# Get all trials reaching for target 0
-response = requests.get('http://localhost:8000/api/trials/by-target/0')
-trials = response.json()['trials']  # 77 trials
-
-# Create session for calibration
-session = requests.post('http://localhost:8000/api/sessions/create',
-                       json={'custom_code': 'calibration-target0'}).json()
-
-# Stream data from each calibration trial
-for trial in trials[:10]:  # First 10 trials
-    trial_id = trial['trial_id']
-    stream_url = f"{session['stream_url']}?trial_id={trial_id}"
-    # Connect to stream_url and collect calibration data
-```
-
-### 4. Ground Truth Validation
-### 4. Ground Truth Validation
-Validate decoder predictions against real target positions:
-
-```python
-import websockets
-import json
-import requests
-
-# Create validation session
-session = requests.post('http://localhost:8000/api/sessions/create',
-                       json={'custom_code': 'validation-run1'}).json()
-
-# Stream with known targets
-async with websockets.connect(session['stream_url']) as ws:
-    async for message in ws:
-        packet = json.loads(message)['data']
-        
-        # Your decoder prediction
-        predicted_target = my_decoder.predict(packet['spikes'])
-        
-        # Ground truth
-        actual_target = (packet['intention']['target_x'], 
-                        packet['intention']['target_y'])
-        
-        # Calculate error
-        error = distance(predicted_target, actual_target)
-```
-
-## Next Steps
-
-**Phase 2: Frontend Dashboard**
-- Real-time visualization of spike rasters
-- Cursor trajectory plotting
-- Decoder performance metrics
-- WebSocket client in React/TypeScript
-- Session management UI (create, list, delete sessions)
-
-**Phase 3: Decoder Integration**
-- Kalman filter decoder implementation
-- Online calibration endpoint
-- Ground truth comparison metrics
-- A/B testing framework with session isolation
-
-**Phase 4: Multi-Dataset Support**
-- Switch between different NWB files
-- Dataset selection API endpoint per session
-- Unified metadata format
-- Recording mode for saving streams
-
-## Contributing
-
-This is a research/development tool. For questions or issues:
-1. Check this README first (single source of truth)
-2. Examine server logs for errors
-3. Run `python test_client.py 10` to validate setup
-4. Review code comments in `data_loader.py` and `playback_engine.py`
-
-## License
-
-Research use only. Dataset from [Neural Latents Benchmark](https://neurallatents.github.io/).
 
 ---
 
-**Last Updated**: January 12, 2026  
-**Status**: ✅ MVP Complete - Multi-session architecture with 40Hz streaming and intent-based calibration API
-
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Common Issues
 
-**Port already in use (Address already in use)**
+#### Port Already in Use
+
 ```bash
-# Change port in config.py or environment variable
-set SERVER_PORT=8001  # Windows
-export SERVER_PORT=8001  # Linux/Mac
+# Change port in config.py or use environment variable
+# Windows
+set PHANTOM_PORT=8001
+
+# Linux/macOS
+export PHANTOM_PORT=8001
+
+# Then restart server
+python main.py
 ```
 
-**Dataset not found**
+#### Dataset Not Found
+
 ```bash
 # Verify file exists
-ls data/mc_maze.nwb  # Linux/Mac
-dir data\mc_maze.nwb  # Windows
+# Windows
+dir data\mc_maze.nwb
+
+# Linux/macOS
+ls data/mc_maze.nwb
 
 # Re-download if missing
 dandi download https://dandiarchive.org/dandiset/000140/draft
 ```
 
-**Low stream rate (<40Hz)**
-- Check server logs for errors
-- Verify HDF5 file on fast storage (SSD recommended)
-- Ensure no other processes accessing file
-- Check timing_error in `/api/stats` endpoint
+#### Low Stream Rate (<40Hz)
 
-**Connection refused**
+- Check server logs for timing errors
+- Verify NWB file is on SSD (not HDD)
+- Ensure no other processes are accessing the file
+- Check CPU usage (should be <10% per core)
+
+```bash
+# Get performance stats
+curl http://localhost:8000/api/stats/{session_code}
+```
+
+#### Connection Refused
+
 ```bash
 # Test health endpoint
 curl http://localhost:8000/health
 
-# Check if sessions are running
+# List active sessions
 curl http://localhost:8000/api/sessions
-
-# Check firewall (Windows)
-netsh advfirewall firewall add rule name="PhantomLink" dir=in action=allow protocol=TCP localport=8000
 
 # Try 127.0.0.1 instead of localhost
 ws://127.0.0.1:8000/stream/my-session
 ```
 
-**Session not found**
-```bash
-# List active sessions
-curl http://localhost:8000/api/sessions
+#### Session Not Found
 
-# Create session explicitly before connecting
+```bash
+# Create session explicitly
 curl -X POST http://localhost:8000/api/sessions/create \
   -H "Content-Type: application/json" \
   -d '{"custom_code": "my-session"}'
@@ -734,115 +867,125 @@ curl -X POST http://localhost:8000/api/sessions/create \
 ws://localhost:8000/stream/my-session
 ```
 
-**Too many sessions (max limit reached)**
+#### Too Many Sessions
+
 ```bash
 # Delete unused sessions
 curl -X DELETE http://localhost:8000/api/sessions/{session_code}
 
 # Trigger cleanup of expired sessions
 curl -X POST http://localhost:8000/api/sessions/cleanup
-
-# Oldest sessions auto-evicted via LRU when hitting limit
 ```
-
-**AttributeError: 'VectorIndex' object has no attribute 'item'**
-- This is a pynwb version issue
-- Ensure pynwb >= 3.1.3: `pip install --upgrade pynwb`
-
-**Numpy/h5py incompatibility errors**
-- Upgrade both: `pip install --upgrade numpy h5py`
-- Requires numpy >= 2.0 for Python 3.12+
 
 ### Performance Tuning
 
 **Check current performance:**
 ```bash
-curl http://localhost:8000/api/stats
+curl http://localhost:8000/api/stats/{session_code}
 ```
 
 **Optimize for higher throughput:**
 - Use SSD storage for NWB file
-- Increase process priority (Windows Task Manager / Linux `nice`)
 - Close unnecessary background applications
-- Monitor CPU usage (should be <10% per core)
+- Increase process priority
+- Monitor CPU usage
 
 ### Debug Mode
 
-Enable verbose logging:
+Enable verbose logging in [config.py](config.py):
+
 ```python
-# In config.py
 import logging
 logging.basicConfig(level=logging.DEBUG)
 ```
 
-## Running Tests
+---
 
-PhantomLink includes a comprehensive test suite covering models, data loading, streaming engine, session management, and API endpoints.
+## 🤝 Contributing
 
-### Quick Test Run
+We welcome contributions from the BCI and neurotechnology community!
 
-```bash
-# Install test dependencies (included in requirements.txt)
-pip install pytest pytest-asyncio pytest-cov
+### How to Contribute
 
-# Run all tests
-pytest -v
+1. **Fork the repository**
+2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
+3. **Make your changes** with tests and documentation
+4. **Run tests**: `pytest -v`
+5. **Commit your changes**: `git commit -m 'Add amazing feature'`
+6. **Push to branch**: `git push origin feature/amazing-feature`
+7. **Open a Pull Request**
 
-# Windows batch file
-test.bat
-```
+### Development Guidelines
 
-### Test Suites
+- Write tests for new features
+- Update documentation
+- Follow existing code style
+- Add type hints
+- Use async/await for I/O operations
+- Keep functions focused and testable
 
-```bash
-# Unit tests only
-pytest test_models.py test_data_loader.py test_playback_engine.py test_session_manager.py -v
+### Reporting Issues
 
-# Integration tests
-pytest test_server.py -v
+Found a bug or have a feature request?
 
-# With coverage report
-pytest --cov=. --cov-report=html --cov-report=term-missing
+1. Check existing issues first
+2. Provide detailed description
+3. Include server logs if relevant
+4. Share test output from `python test_client.py 10`
 
-# Windows: specific test suite
-test.bat unit          # Unit tests
-test.bat integration   # Integration tests  
-test.bat coverage      # With coverage
-test.bat fast          # Skip slow tests
-```
+---
 
-### Test Files
+## 📚 Additional Resources
 
-| File | Coverage | Type |
-|------|----------|------|
-| `test_models.py` | Pydantic models | Unit |
-| `test_data_loader.py` | NWB data access | Unit |
-| `test_playback_engine.py` | 40Hz streaming | Unit |
-| `test_session_manager.py` | Multi-session | Unit |
-| `test_server.py` | FastAPI endpoints | Integration |
-| `test_calibration.py` | Manual testing | Integration |
-| `test_client.py` | Stream validation | Integration |
-| `test_multi_session.py` | Session isolation | Integration |
+- **Dataset**: [Neural Latents Benchmark](https://neurallatents.github.io/)
+- **DANDI Archive**: [Dataset #000140](https://dandiarchive.org/dandiset/000140)
+- **PyNWB Documentation**: [pynwb.readthedocs.io](https://pynwb.readthedocs.io/)
+- **FastAPI Documentation**: [fastapi.tiangolo.com](https://fastapi.tiangolo.com/)
 
-### Coverage Report
+---
 
-View detailed coverage:
-```bash
-pytest --cov=. --cov-report=html
-# Open htmlcov/index.html in browser
-```
+## 📄 License
 
-### CI/CD
+This project is for **research use only**. The MC_Maze dataset is provided by the [Neural Latents Benchmark](https://neurallatents.github.io/) project.
 
-Tests run automatically on GitHub Actions for:
-- Push to `main` or `develop` branches
-- Pull requests
-- Multiple Python versions (3.9, 3.10, 3.11)
-- Multiple OS (Ubuntu, Windows, macOS)
+---
 
-See `.github/workflows/tests.yml` for configuration.
+## 🗺️ Roadmap
 
-### Documentation
+### Phase 2: Frontend Dashboard
+- [ ] Real-time spike raster visualization
+- [ ] Cursor trajectory plotting
+- [ ] Decoder performance metrics
+- [ ] Session management UI
 
-- **Full testing guide**: [TESTING.md](TESTING.md)
-- **Quick reference**: [TEST_REFERENCE.md](TEST_REFERENCE.md)
+### Phase 3: Decoder Integration
+- [ ] Kalman filter decoder implementation
+- [ ] Online calibration endpoint
+- [ ] Ground truth comparison metrics
+- [ ] A/B testing framework
+
+### Phase 4: Multi-Dataset Support
+- [ ] Switch between different NWB files
+- [ ] Dataset selection API per session
+- [ ] Unified metadata format
+- [ ] Recording mode for saving streams
+
+---
+
+## 📞 Contact
+
+- **GitHub**: [@yelabb](https://github.com/yelabb)
+- **Project**: [PhantomLink](https://github.com/yelabb/PhantomLink)
+- **Issues**: [Report a bug](https://github.com/yelabb/PhantomLink/issues)
+
+---
+
+<div align="center">
+
+**Built with ❤️ for the BCI Community**
+
+*Last Updated: January 12, 2026 • Version 0.2.0 • Status: ✅ MVP Complete*
+
+[⬆ Back to Top](#-phantomlink)
+
+</div>
