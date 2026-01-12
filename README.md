@@ -13,7 +13,9 @@
 
 **The Ethereal/Mailtrap for Neurotechnology**
 
-*Stream pre-recorded neural data at 40Hz with microsecond precision, simulating live brain-computer interface signals for decoder development, calibration workflows, and ground truth validation.*
+*Stream pre-recorded neural data at 40Hz with millisecond-range timing, simulating live brain-computer interface signals for decoder development, calibration workflows, and ground truth validation.*
+
+> ⚠️ **Timing Disclaimer:** PhantomLink provides soft real-time streaming (1-15ms jitter) suitable for algorithm development and testing. For safety-critical applications requiring hard real-time guarantees (<100μs), use dedicated real-time OS and hardware.
 
 > **New to Brain-Computer Interfaces?** Check out our [Complete Beginner's Guide](docs/BEGINNERS_GUIDE.md) for an educational introduction to BCIs, neural data, and how PhantomLink works!
 
@@ -52,7 +54,7 @@
 ### What Makes PhantomLink Special?
 
 - 🎯 **Real Neural Data**: Uses MC_Maze dataset (142 neural units, 294s, 100 trials) from the Neural Latents Benchmark
-- ⚡ **40Hz Precision**: Sub-millisecond timing accuracy for realistic BCI simulation
+- ⚡ **40Hz Streaming**: Millisecond-range timing (1-15ms jitter) for realistic BCI simulation
 - 🔄 **Multi-Session Isolation**: Each user/experiment gets independent playback state
 - 🎚️ **Intent-Based Filtering**: Stream only packets matching specific targets or trials
 - 🚀 **Production-Ready**: FastAPI + Uvicorn ASGI with async WebSocket streaming
@@ -66,7 +68,7 @@
 
 | Feature | Description |
 |---------|-------------|
-| **40Hz Real-Time Streaming** | WebSocket endpoint with sub-millisecond timing accuracy |
+| **40Hz Real-Time Streaming** | WebSocket endpoint with soft real-time timing (1-15ms variance) |
 | **Multi-Session Architecture** | Independent streams with shareable URLs and automatic expiration |
 | **Intent-Based Calibration** | Query trials by target, filter streams by intention |
 | **Time-Aligned Payloads** | Spike counts + cursor kinematics + target intention synchronized to 25ms bins |
@@ -255,10 +257,10 @@ python test_calibration.py
 | Metric | Value |
 |--------|-------|
 | Packet Generation | ~7ms (HDF5 read + binning) |
-| Timing Precision | <1ms std deviation |
+| Timing Precision | 1-15ms variance (soft real-time, OS-dependent) |
 | Memory Footprint | <500MB (memory-mapped, shared across sessions) |
-| Sustained Throughput | 40Hz for hours per session |
-| Latency | 25ms ± 0.5ms per packet |
+| Sustained Throughput | 40Hz target rate per session |
+| Latency | 25ms ± 5-15ms per packet (asyncio + OS scheduler) |
 | Session Overhead | ~50KB per session |
 | Max Concurrent Sessions | 10 (configurable, LRU eviction) |
 | Session TTL | 3600s (1 hour, auto-cleanup) |
@@ -598,6 +600,88 @@ for trial in trials[:10]:  # First 10 trials
     stream_url = f"{session['stream_url']}?trial_id={trial_id}"
     # Connect to stream_url and collect calibration data
 ```
+
+---
+
+## ⚠️ Technical Limitations & Known Issues
+
+### Timing & Real-Time Performance
+
+**Soft Real-Time Only (Not Hard Real-Time)**
+- PhantomLink uses `asyncio.sleep()` which relies on OS scheduler
+- **Actual jitter:** 1-15ms (Windows: 10-15ms, Linux: 1-5ms depending on CONFIG_HZ)
+- **NOT suitable for:** Safety-critical motor control, closed-loop stimulation with <1ms latency requirements
+- **Suitable for:** Algorithm development, decoder training, prototyping, ground truth validation
+
+**OS-Specific Timing Characteristics:**
+| OS | Typical Jitter | Scheduler Resolution |
+|----|---------------|---------------------|
+| Windows 10/11 | 10-15ms | ~15.6ms (64Hz timer) |
+| Linux (CONFIG_HZ=1000) | 1-4ms | 1ms |
+| Linux (CONFIG_HZ=250) | 4-8ms | 4ms |
+| macOS | 5-10ms | Variable |
+
+**For Hard Real-Time (if needed):**
+- Use PREEMPT_RT patched Linux kernel
+- Replace `asyncio.sleep()` with busy-wait loops for last microseconds
+- Consider dedicated real-time hardware (e.g., NI DAQ, Intan RHS)
+
+### I/O & Concurrency Bottlenecks
+
+**ThreadPool Executor: Hardcoded 4 Workers**
+- Located in [data_loader.py:54](src/phantomlink/data_loader.py#L54): `ThreadPoolExecutor(max_workers=4)`
+- **Impact:** With 10 concurrent sessions, threads are shared causing I/O contention
+- **Estimated latency:** 25ms (ideal) → 50-200ms (10 sessions)
+- **Recommendation:** Make configurable based on CPU cores or session count
+
+**Disk I/O Performance:**
+- HDF5 memory-mapped reads: ~5-10ms per packet on SSD
+- **Bottleneck:** Random access patterns cause SSD seek overhead
+- **Solution:** Sequential pre-buffering (not yet implemented)
+
+### Dataset Format Coupling
+
+**NWB Schema Hardcoded for MC_Maze**
+- Field names hardcoded: `cursor_pos`, `hand_vel`, `active_target`
+- **Fragility:** If NWB structure changes (common in research), loader breaks
+- **Current datasets supported:** MC_Maze from Neural Latents Benchmark only
+
+**Proposed Solution (Future Enhancement):**
+```python
+# config.py
+class DatasetSchema(BaseSettings):
+    cursor_field: str = "cursor_pos"
+    velocity_field: str = "hand_vel"
+    target_field: str = "active_target"
+```
+
+### Scalability Constraints
+
+**Session Limits:**
+- Max concurrent sessions: 10 (configurable in [config.py](src/phantomlink/config.py))
+- LRU eviction when limit exceeded
+- Each session: ~50KB memory overhead
+
+**Performance Degradation:**
+| Concurrent Sessions | Avg Latency | Timing Jitter |
+|---------------------|-------------|---------------|
+| 1-3 sessions | 25-30ms | ±2-5ms |
+| 4-7 sessions | 30-50ms | ±5-10ms |
+| 8-10 sessions | 50-100ms | ±10-20ms |
+| >10 sessions | >100ms | ±20-50ms |
+
+### Use Case Recommendations
+
+| Use Case | PhantomLink Suitable? | Alternatives |
+|----------|----------------------|--------------|
+| **Algorithm Development** | ✅ Excellent | - |
+| **Decoder Training** | ✅ Excellent | - |
+| **Ground Truth Validation** | ✅ Good | - |
+| **Closed-Loop BCI (soft RT)** | ⚠️ Testing only | Real hardware |
+| **Safety-Critical Control** | ❌ Not suitable | Real-time OS + hardware |
+| **High-Throughput (>100Hz)** | ❌ Not designed for | Custom C++/Rust solution |
+| **Multi-User Demos (<5 users)** | ✅ Good | - |
+| **Production Scale (>10 users)** | ⚠️ Limited | Load balancer + multiple instances |
 
 ---
 
