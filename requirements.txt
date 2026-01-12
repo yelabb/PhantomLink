@@ -19,6 +19,9 @@ python-dateutil==2.8.2
 # Performance and async
 aiofiles==23.2.1
 
+# High-performance serialization
+msgpack>=1.0.8
+
 # Optional: for downloading Neural Latents Benchmark data
 requests==2.31.0
 tqdm==4.66.1

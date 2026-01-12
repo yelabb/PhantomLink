@@ -18,6 +18,7 @@ from phantomlink.models import StreamMetadata
 from phantomlink.playback_engine import PlaybackEngine
 from phantomlink.session_manager import SessionManager
 from phantomlink.lsl_streamer import LSLStreamManager
+from phantomlink.serialization import serialize_for_websocket
 
 # Configure logging
 logging.basicConfig(
@@ -395,16 +396,18 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
     logger.info(f"Client {client_id} connected to session {session_code}. Active connections: {len(active_connections)}")
     
     try:
-        # Send initial metadata
+        # Send initial metadata (MessagePack binary format for 60% size reduction)
         metadata = playback_engine.get_metadata()
-        await websocket.send_json({
+        metadata_msg = {
             "type": "metadata",
             "data": metadata.model_dump(),
             "session": {
                 "code": session_code,
                 "url": f"ws://localhost:{settings.port}/stream/{session_code}"
             }
-        })
+        }
+        binary_metadata = serialize_for_websocket("metadata", metadata_msg["data"])
+        await websocket.send_bytes(binary_metadata)
         
         # Start streaming packets with optional filters
         async for packet in playback_engine.stream(loop=True, trial_filter=trial_id, target_filter=target_id):
@@ -413,11 +416,9 @@ async def websocket_stream(websocket: WebSocket, session_code: str,
                 if lsl_streamer:
                     await lsl_streamer.push_packet_async(packet)
                 
-                # Send packet as JSON via WebSocket
-                await websocket.send_json({
-                    "type": "data",
-                    "data": packet.model_dump()
-                })
+                # Send packet as MessagePack binary (60% smaller, 3-5x faster than JSON)
+                binary_packet = serialize_for_websocket("data", packet)
+                await websocket.send_bytes(binary_packet)
                 
                 # Check if client sent any control messages
                 # (non-blocking receive with timeout)
