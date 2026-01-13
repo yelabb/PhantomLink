@@ -9,7 +9,7 @@ from typing import Set, Optional, Literal
 import asyncio
 import time
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -124,8 +124,12 @@ async def shutdown_event():
 
 
 @app.get("/")
-async def root():
+async def root(request: Request):
     """Root endpoint with API information."""
+    # Determine WebSocket scheme (ws or wss) based on HTTP scheme
+    ws_scheme = "wss" if request.url.scheme == "https" else "ws"
+    base_url = f"{ws_scheme}://{request.url.netloc}"
+    
     return {
         "service": "PhantomLink Core",
         "version": "0.2.0",
@@ -142,14 +146,14 @@ async def root():
             "session_stats": "GET /api/sessions/{session_code}",
             "metadata": "/api/metadata",
             "trials": "/api/trials",
-            "stream": "ws://localhost:8000/stream/{session_code}",
-            "stream_binary": "ws://localhost:8000/stream/binary/{session_code}"
+            "stream": f"{base_url}/stream/{{session_code}}",
+            "stream_binary": f"{base_url}/stream/binary/{{session_code}}"
         },
         "examples": [
             "Create session: POST /api/sessions/create",
-            "Stream (JSON): ws://localhost:8000/stream/swift-neural-42",
-            "Stream (Binary/MessagePack): ws://localhost:8000/stream/binary/swift-neural-42",
-            "With filter: ws://localhost:8000/stream/swift-neural-42?target_id=0"
+            f"Stream (JSON): {base_url}/stream/swift-neural-42",
+            f"Stream (Binary/MessagePack): {base_url}/stream/binary/swift-neural-42",
+            f"With filter: {base_url}/stream/swift-neural-42?target_id=0"
         ]
     }
 

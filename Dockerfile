@@ -30,7 +30,7 @@ WORKDIR /app
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libhdf5-103 \
+    libhdf5-310 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -60,6 +60,7 @@ EXPOSE 8000
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src \
     PHANTOM_HOST=0.0.0.0 \
     PHANTOM_PORT=8000
 

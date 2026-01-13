@@ -60,7 +60,6 @@ data/processed/
 Dockerfile
 .dockerignore
 docker-compose.yml
-docker-entrypoint.sh
 
 # Fly.io
 fly.toml
