@@ -127,7 +127,10 @@ async def shutdown_event():
 async def root(request: Request):
     """Root endpoint with API information."""
     # Determine WebSocket scheme (ws or wss) based on HTTP scheme
-    ws_scheme = "wss" if request.url.scheme == "https" else "ws"
+    # Check X-Forwarded-Proto header for proxies like Fly.io
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    is_secure = request.url.scheme == "https" or forwarded_proto == "https"
+    ws_scheme = "wss" if is_secure else "ws"
     base_url = f"{ws_scheme}://{request.url.netloc}"
     
     return {
