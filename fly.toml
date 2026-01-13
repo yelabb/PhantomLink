@@ -1,0 +1,51 @@
+# Fly.io Deployment Configuration for PhantomLink
+
+app = "phantomlink"  # Change this to your app name
+primary_region = "iad"  # Change to your preferred region
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PHANTOM_HOST = "0.0.0.0"
+  PHANTOM_PORT = "8000"
+  PHANTOM_STREAM_FREQUENCY_HZ = "40"
+  PHANTOM_MAX_CONNECTIONS = "10"
+  PHANTOM_LSL_ENABLED = "true"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  # WebSocket support
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8000
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["http", "tls"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+[[vm]]
+  memory = '2gb'
+  cpu_kind = 'shared'
+  cpus = 2

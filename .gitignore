@@ -23,9 +23,11 @@ wheels/
 .installed.cfg
 *.egg
 
-# Data files
-data/
-*.nwb
+# Data files (excluding raw dataset which is included)
+data/processed/
+# Uncomment below to exclude dataset from repo:
+# data/raw/mc_maze.nwb
+# *.nwb
 *.h5
 *.hdf5
 

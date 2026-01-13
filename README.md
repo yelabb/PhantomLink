@@ -102,7 +102,7 @@ See [examples/noise_injection_demo.py](examples/noise_injection_demo.py) and [NO
 ### Prerequisites
 
 - Python 3.12+
-- ~2GB disk space for dataset
+- ~30MB disk space for dataset
 
 ### Installation
 
@@ -123,7 +123,7 @@ mkdir -p data/raw
 mv 000140/sub-Jenkins/* data/raw/mc_maze.nwb
 ```
 
-Expected: `data/raw/mc_maze.nwb` (~1.5GB)
+Expected: `data/raw/mc_maze.nwb` (~28MB)
 
 ### Start Server
 
