@@ -1,51 +1,53 @@
-# Fly.io Deployment Configuration for PhantomLink
+# fly.toml app configuration file generated for phantomlink on 2026-01-13T09:18:52-05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "phantomlink"  # Change this to your app name
-primary_region = "iad"  # Change to your preferred region
+app = 'phantomlink'
+primary_region = 'lax'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
 [env]
-  PHANTOM_HOST = "0.0.0.0"
-  PHANTOM_PORT = "8000"
-  PHANTOM_STREAM_FREQUENCY_HZ = "40"
-  PHANTOM_MAX_CONNECTIONS = "10"
-  PHANTOM_LSL_ENABLED = "true"
+  PHANTOM_HOST = '0.0.0.0'
+  PHANTOM_LSL_ENABLED = 'true'
+  PHANTOM_MAX_CONNECTIONS = '10'
+  PHANTOM_PORT = '8000'
+  PHANTOM_STREAM_FREQUENCY_HZ = '40'
 
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
+  processes = ['app']
 
-  # WebSocket support
   [http_service.concurrency]
-    type = "connections"
+    type = 'connections'
     hard_limit = 25
     soft_limit = 20
 
 [[services]]
-  protocol = "tcp"
+  protocol = 'tcp'
   internal_port = 8000
 
   [[services.ports]]
     port = 80
-    handlers = ["http"]
+    handlers = ['http']
     force_https = true
 
   [[services.ports]]
     port = 443
-    handlers = ["http", "tls"]
+    handlers = ['http', 'tls']
 
   [services.concurrency]
-    type = "connections"
+    type = 'connections'
     hard_limit = 25
     soft_limit = 20
 
 [[vm]]
   memory = '2gb'
-  cpu_kind = 'shared'
   cpus = 2
+  memory_mb = 2048
