@@ -1,3 +1,5 @@
+<img width="350" height="424" alt="logo" src="https://github.com/user-attachments/assets/845621a7-d4cf-4240-a3a9-95affd035c43" />
+
 # PhantomLink
 
 Neural data streaming server for BCI development. Replays MC_Maze dataset at 40Hz via WebSocket and LSL protocols.
@@ -734,3 +736,4 @@ Research use only. MC_Maze dataset from Neural Latents Benchmark.
 - GitHub: [@yelabb](https://github.com/yelabb)
 - Project: [PhantomLink](https://github.com/yelabb/PhantomLink)
 - Issues: [Report a bug](https://github.com/yelabb/PhantomLink/issues)
+
