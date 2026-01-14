@@ -356,6 +356,31 @@ async def seek_playback(session_code: str, position_seconds: float):
     return {"status": "seeked", "position_seconds": position_seconds, "session_code": session_code}
 
 
+@app.get("/api/control/{session_code}/position")
+async def get_playback_position(session_code: str):
+    """Get the current playback position for a specific session."""
+    if not session_manager:
+        raise HTTPException(status_code=503, detail="Session manager not initialized")
+    
+    engine = session_manager.get_session(session_code)
+    if not engine:
+        raise HTTPException(status_code=404, detail=f"Session {session_code} not found")
+    
+    # Calculate current position in seconds
+    current_index = engine._current_index
+    position_seconds = current_index * 0.025  # 40Hz = 0.025s per packet
+    duration_seconds = engine.loader.duration if engine.loader else 0
+    
+    return {
+        "session_code": session_code,
+        "position_seconds": position_seconds,
+        "current_index": current_index,
+        "duration_seconds": duration_seconds,
+        "is_playing": engine.is_running and not engine.is_paused,
+        "is_paused": engine.is_paused
+    }
+
+
 async def _handle_stream(
     websocket: WebSocket,
     session_code: str,
