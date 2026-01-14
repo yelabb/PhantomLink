@@ -4,6 +4,7 @@
 
 Neural data streaming server for BCI development. Replays MC_Maze dataset at 40Hz via WebSocket and LSL protocols.
 
+[![PhantomLoop](https://img.shields.io/badge/Used_by-PhantomLoop-009688.svg)](https://github.com/yelabb/PhantomLoop)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg)](https://fastapi.tiangolo.com)
 [![Data Analysis](https://img.shields.io/badge/📊_Data_Analysis-Notebook-orange.svg)](notebooks/data_analysis.ipynb)
@@ -736,4 +737,5 @@ Research use only. MC_Maze dataset from Neural Latents Benchmark.
 - GitHub: [@yelabb](https://github.com/yelabb)
 - Project: [PhantomLink](https://github.com/yelabb/PhantomLink)
 - Issues: [Report a bug](https://github.com/yelabb/PhantomLink/issues)
+
 
