@@ -502,6 +502,13 @@ async def _handle_stream(
     except Exception as e:
         logger.error(f"Error in {format_desc} WebSocket connection {client_id} (session {session_code}): {e}")
     finally:
+        # Flush and close the websocket connection properly
+        try:
+            # Ensure all pending data is sent before closing
+            await websocket.close()
+        except Exception as e:
+            logger.warning(f"Error closing websocket for client {client_id}: {e}")
+        
         active_connections.discard(websocket)
         session_manager.decrement_connections(session_code)
         logger.info(f"Client {client_id} removed from {format_desc} stream session {session_code}. Active connections: {len(active_connections)}")
