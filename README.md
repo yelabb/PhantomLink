@@ -1,3 +1,10 @@
+
+> **🚧 Work In Progress: Active Engineering Sprint**
+>
+> This project is currently under active development. Core features are functional but APIs and data structures are subject to rapid iteration. Not yet ready for stable deployment.
+
+
+
 <img width="350" height="424" alt="logo" src="https://github.com/user-attachments/assets/845621a7-d4cf-4240-a3a9-95affd035c43" />
 
 # PhantomLink
@@ -9,6 +16,7 @@ Neural data streaming server for BCI development. Replays MC_Maze dataset at 40H
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg)](https://fastapi.tiangolo.com)
 [![Data Analysis](https://img.shields.io/badge/📊_Data_Analysis-Notebook-orange.svg)](notebooks/data_analysis.ipynb)
 [![Beginner's Guide](https://img.shields.io/badge/📚_Beginner's_Guide-Learn-blue.svg)](docs/BEGINNERS_GUIDE.md)
+
 
 **Status:** MVP Complete  
 **Timing:** Soft real-time (1-15ms jitter)  
