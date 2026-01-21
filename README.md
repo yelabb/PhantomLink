@@ -756,6 +756,16 @@ curl -X POST http://localhost:8000/api/sessions/cleanup
 
 Research use only. MC_Maze dataset from Neural Latents Benchmark.
 
+## Acknowledgments
+
+This project was developed with assistance from AI coding assistants and workflows:
+- Claude Opus 4.5 (Anthropic)
+- Claude Sonnet 4.5 (Anthropic)
+- Gemini 3.0 Pro (Google)
+- GPT 5.2 (OpenAI)
+
+All code was tested and validated by the author.
+
 ## Contact
 
 - GitHub: [@yelabb](https://github.com/yelabb)
